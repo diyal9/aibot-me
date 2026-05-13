@@ -9,7 +9,6 @@ import (
 )
 
 func main() {
-	// 初始化日志
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
@@ -17,9 +16,10 @@ func main() {
 
 	router := NewRouter()
 
-	port := os.Getenv("PORT")
+	// Gateway listens on 8085 to replace the old backend directly
+	port := os.Getenv("GATEWAY_PORT")
 	if port == "" {
-		port = "8080"
+		port = "8085"
 	}
 
 	log.Info().Str("port", port).Msg("Gateway listening")
