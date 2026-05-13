@@ -1,0 +1,13 @@
+
+# Secrets
+*.key
+*.pem
+*.cert
+
+# Binaries
+digital-human
+*.exe
+*.o
+
+# Node modules
+node_modules/
