@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # === 网关层 ===
+  gateway:
+    build: 
+      context: .
+      dockerfile: gateway/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+    depends_on:
+      - user-svc
+      - ai-svc
+      - social-svc
+      - commerce-svc
+    networks:
+      - aibot-net
+
+  # === 微服务层 ===
+  
+  user-svc:
+    build: ./services/user-svc
+    ports:
+      - "8001:8001"
+    networks:
+      - aibot-net
+
+  ai-svc:
+    build: ./services/ai-svc
+    ports:
+      - "8002:8002"
+    environment:
+      - LLM_API_KEY=${LLM_API_KEY}
+      - STT_API_KEY=${STT_API_KEY}
+    networks:
+      - aibot-net
+
+  social-svc:
+    build: ./services/social-svc
+    ports:
+      - "8003:8003"
+    networks:
+      - aibot-net
+
+  commerce-svc:
+    build: ./services/commerce-svc
+    ports:
+      - "8004:8004"
+    networks:
+      - aibot-net
+
+  # === 基础设施 ===
+  
+  # Redis: 缓存、Session、限流
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - aibot-net
+
+  # Postgres: 主数据库
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aibot
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: aibot
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - aibot-net
+
+networks:
+  aibot-net:
+    driver: bridge
+
+volumes:
+  redis_data:
+  pg_data:
