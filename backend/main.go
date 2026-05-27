@@ -68,32 +68,21 @@ func ttsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Call Supertonic OpenAI-compatible endpoint
-	ttsReqBody, _ := json.Marshal(map[string]interface{}{
+	ttsPayload := map[string]interface{}{
 		"model":           "supertonic",
 		"input":           req.Text,
 		"voice":           voice,
 		"response_format": "wav",
 		"speed":           speed,
 		"language":        lang,
-	})
-
-	ttsReq, err := http.NewRequest("POST", SUPERTONIC_URL+"/v1/audio/speech", bytes.NewReader(ttsReqBody))
-	if err != nil {
-		// Fallback: return JSON telling client to use speechSynthesis
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status":  "fallback",
-			"reason":  "supertonic_unavailable",
-			"text":    req.Text,
-			"message": "Using client-side TTS",
-		})
-		return
 	}
-	ttsReq.Header.Set("Content-Type", "application/json")
+	ttsReqJSON, _ := json.Marshal(ttsPayload)
 
-	client := &http.Client{Timeout: 30}
-	resp, err := client.Do(ttsReq)
+	fmt.Printf("[TTS] Sending request to %s (payload: %s)\n", SUPERTONIC_URL, string(ttsReqJSON))
+
+	resp, err := http.Post(SUPERTONIC_URL+"/v1/audio/speech", "application/json", strings.NewReader(string(ttsReqJSON)))
 	if err != nil {
+		fmt.Printf("[TTS] Supertonic request failed: %v\n", err)
 		// Fallback
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{

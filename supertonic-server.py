@@ -6,12 +6,18 @@ import sys
 import io
 import json
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from supertonic import TTS
 
-# Initialize TTS once (downloads model on first call if needed)
-tts = TTS(auto_download=True)
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    pass
+
+# Initialize TTS once (models already downloaded to ~/.cache/supertonic3)
+tts = TTS(auto_download=False)
 
 class TTSHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
     def do_POST(self):
         if self.path == '/v1/audio/speech' or self.path == '/v1/tts':
             content_length = int(self.headers.get('Content-Length', 0))
@@ -48,10 +54,12 @@ class TTSHandler(BaseHTTPRequestHandler):
                 audio_data = (wav.squeeze() * 32767).astype(np.int16).tobytes()
                 wf.writeframes(audio_data)
 
+            wav_data = wav_bytes.getvalue()
             self.send_response(200)
             self.send_header('Content-Type', 'audio/wav')
+            self.send_header('Content-Length', str(len(wav_data)))
             self.end_headers()
-            self.wfile.write(wav_bytes.getvalue())
+            self.wfile.write(wav_data)
             print(f"TTS: synthesized {len(text)} chars -> {duration[0]:.2f}s audio", flush=True)
 
         else:
@@ -71,7 +79,8 @@ class TTSHandler(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     port = 7788
-    server = HTTPServer(('0.0.0.0', port), TTSHandler)
+    server = ThreadingHTTPServer(('0.0.0.0', port), TTSHandler)
+    server.daemon_threads = True
     print(f"Supertonic HTTP server running on :{port}", flush=True)
     print(f"Endpoints: POST /v1/audio/speech, POST /v1/tts, GET /health", flush=True)
     server.serve_forever()
