@@ -29,6 +29,13 @@ class TTSHandler(BaseHTTPRequestHandler):
             language = data.get('language', 'na')
             speed = data.get('speed', 1.0)
 
+            # Auto-detect Chinese: if text contains CJK chars and lang is 'na', switch to 'zh'
+            if language == 'na':
+                import re
+                if re.search(r'[\u4e00-\u9fff]', text):
+                    print(f"[TTS] Auto-detected Chinese text, using lang='zh'", flush=True)
+                    language = 'zh'
+
             if not text:
                 self.send_error(400, 'Empty input')
                 return

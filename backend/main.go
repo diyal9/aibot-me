@@ -67,12 +67,11 @@ func ttsHandler(w http.ResponseWriter, r *http.Request) {
 		speed = req.Speed
 	}
 
-	// Call Supertonic OpenAI-compatible endpoint
+	// Call TTS endpoint (supports both Supertonic WAV and Edge TTS MP3)
 	ttsPayload := map[string]interface{}{
 		"model":           "supertonic",
 		"input":           req.Text,
 		"voice":           voice,
-		"response_format": "wav",
 		"speed":           speed,
 		"language":        lang,
 	}
@@ -80,7 +79,8 @@ func ttsHandler(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("[TTS] Sending request to %s (payload: %s)\n", SUPERTONIC_URL, string(ttsReqJSON))
 
-	resp, err := http.Post(SUPERTONIC_URL+"/v1/audio/speech", "application/json", strings.NewReader(string(ttsReqJSON)))
+	ttsClient := &http.Client{Timeout: 30 * time.Second}
+	resp, err := ttsClient.Post(SUPERTONIC_URL+"/v1/audio/speech", "application/json", strings.NewReader(string(ttsReqJSON)))
 	if err != nil {
 		fmt.Printf("[TTS] Supertonic request failed: %v\n", err)
 		// Fallback
@@ -107,8 +107,8 @@ func ttsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return WAV audio directly
-	w.Header().Set("Content-Type", "audio/wav")
+	// Return audio directly (WAV or MP3)
+	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 	w.Header().Set("Cache-Control", "no-cache")
 	io.Copy(w, resp.Body)
 }
