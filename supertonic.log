@@ -1,0 +1,99 @@
+Traceback (most recent call last):
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpx/_transports/default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpcore/_sync/connection.py", line 101, in handle_request
+    raise exc
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpcore/_sync/connection.py", line 78, in handle_request
+    stream = self._connect(request)
+             ^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpcore/_sync/connection.py", line 124, in _connect
+    stream = self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpcore/_backends/sync.py", line 207, in connect_tcp
+    with map_exceptions(exc_map):
+  File "/root/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectError: [Errno 99] Cannot assign requested address
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/huggingface_hub/_snapshot_download.py", line 244, in snapshot_download
+    repo_info = api.repo_info(repo_id=repo_id, repo_type=repo_type, revision=revision)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/huggingface_hub/hf_api.py", line 3506, in repo_info
+    return method(
+           ^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/huggingface_hub/hf_api.py", line 3197, in model_info
+    r = get_session().get(path, headers=headers, timeout=timeout, params=params)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpx/_client.py", line 1053, in get
+    return self.request(
+           ^^^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpx/_client.py", line 825, in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpx/_client.py", line 914, in send
+    response = self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpx/_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpx/_transports/default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+  File "/root/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectError: [Errno 99] Cannot assign requested address
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/supertonic/loader.py", line 127, in download_model
+    snapshot_download(repo_id=repo_id, local_dir=str(temp_dir), revision=revision)
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/huggingface_hub/_snapshot_download.py", line 328, in snapshot_download
+    raise LocalEntryNotFoundError(
+huggingface_hub.errors.LocalEntryNotFoundError: Got: ConnectError: [Errno 99] Cannot assign requested address
+An error happened while trying to locate the files on the Hub and we cannot find the appropriate snapshot folder for the specified revision on the local disk. Please check your internet connection and try again.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/aibot-me/supertonic-server.py", line 12, in <module>
+    tts = TTS(auto_download=True)
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/supertonic/pipeline.py", line 127, in __init__
+    self.model = load_model(
+                 ^^^^^^^^^^^
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/supertonic/loader.py", line 338, in load_model
+    download_model(model_dir, model_name)
+  File "/root/aibot-me/supertonic-venv/lib/python3.11/site-packages/supertonic/loader.py", line 154, in download_model
+    raise RuntimeError(
+RuntimeError: Failed to download model from Supertone/supertonic-3. Please check your internet connection and try again. Error: Got: ConnectError: [Errno 99] Cannot assign requested address
+An error happened while trying to locate the files on the Hub and we cannot find the appropriate snapshot folder for the specified revision on the local disk. Please check your internet connection and try again.

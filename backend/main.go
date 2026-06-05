@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -20,12 +21,20 @@ const (
 	LLM_API_URL   = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
 	STT_API_URL   = "https://dashscope.aliyuncs.com/compatible-mode/v1/audio/transcriptions"
 	LLM_MODEL     = "qwen-turbo"
-	STT_MODEL     = "paraformer-realtime-v1"
+	STT_MODEL     = "paraformer-v2"
 	LLM_API_KEY   = "sk-4a2f4f92b72341ea994c7becdf65da7d"
 )
 
-// System prompt for personality
-const SYSTEM_PROMPT = `你是一个幽默、亲切的AI助手，说话风格轻松自然。回答尽量简短，保持在50字以内。`
+// System prompt for personality (Supertonic Enhanced)
+const SYSTEM_PROMPT = `你是一个幽默、亲切的数学 AI 讲师“小星老师”。
+你的听众是深圳三年级的小学生。讲课风格要生动、有耐心。
+为了让语音听起来像真人，请在回复中巧妙使用以下 Supertonic 语音标签：
+- <breath>：表示自然换气或短暂停顿（建议句间使用）
+- <laugh>：表示轻松、鼓励或开心的语气（如学生做对题时）
+- <sigh>：表示思考或引导（如“嗯...我们来看看..."）
+
+示例：“这道题很简单哦<laugh><breath>我们先看个位<breath>5 加 8 等于 13<breath>写 3 进 1..."
+回答请尽量简短，保持在 80 字以内。`
 
 // Supertonic TTS configuration
 const (
@@ -62,12 +71,12 @@ func ttsHandler(w http.ResponseWriter, r *http.Request) {
 	if req.Language != "" {
 		lang = req.Language
 	}
-	speed := 1.0
+	speed := 0.9 // 稍微慢一点，适合教学场景
 	if req.Speed > 0 {
 		speed = req.Speed
 	}
 
-	// Call TTS endpoint (supports both Supertonic WAV and Edge TTS MP3)
+	// Call TTS endpoint (supports both Supertonic WAV/MP3 and Edge TTS MP3)
 	ttsPayload := map[string]interface{}{
 		"model":           "supertonic",
 		"input":           req.Text,
@@ -113,15 +122,14 @@ func ttsHandler(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, resp.Body)
 }
 
-// STT handler: receives audio blob, sends to Aliyun DashScope for transcription
+// STT handler: Upload → get OSS URL → async transcription → poll
 func sttHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", 405)
 		return
 	}
 
-	// Parse multipart form (audio file)
-	r.ParseMultipartForm(32 << 20) // 32MB max
+	r.ParseMultipartForm(32 << 20)
 	file, header, err := r.FormFile("audio")
 	if err != nil {
 		http.Error(w, "No audio file: "+err.Error(), 400)
@@ -129,64 +137,227 @@ func sttHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Read audio data
 	audioData, err := io.ReadAll(file)
 	if err != nil {
 		http.Error(w, "Failed to read audio: "+err.Error(), 500)
 		return
 	}
 
-	// Create multipart request to DashScope
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	part, err := writer.CreateFormFile("file", header.Filename)
-	if err != nil {
-		http.Error(w, "Failed to create form: "+err.Error(), 500)
-		return
-	}
+	// Debug: save received audio for inspection
+	debugPath := "/tmp/received_stt_debug.wav"
+	os.WriteFile(debugPath, audioData, 0644)
+	log.Printf("[STT] Received audio: %s, size: %d bytes. Saved to %s", header.Filename, len(audioData), debugPath)
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	authHeader := "Bearer " + LLM_API_KEY
+
+	// Step 1: Upload file to DashScope
+	var fileBody bytes.Buffer
+	fileWriter := multipart.NewWriter(&fileBody)
+	part, _ := fileWriter.CreateFormFile("file", header.Filename)
 	part.Write(audioData)
+	fileWriter.WriteField("purpose", "file-extract")
+	fileWriter.Close()
 
-	// Add model field
-	writer.WriteField("model", STT_MODEL)
-	writer.Close()
+	fileReq, _ := http.NewRequest("POST", "https://dashscope.aliyuncs.com/api/v1/files", &fileBody)
+	fileReq.Header.Set("Content-Type", fileWriter.FormDataContentType())
+	fileReq.Header.Set("Authorization", authHeader)
 
-	// Send to DashScope STT API
-	req, _ := http.NewRequest("POST", STT_API_URL, &body)
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+LLM_API_KEY)
-
-	client := &http.Client{Timeout: 30}
-	resp, err := client.Do(req)
+	fileResp, err := client.Do(fileReq)
 	if err != nil {
-		http.Error(w, "STT request failed: "+err.Error(), 500)
+		log.Printf("[STT] Upload failed: %v", err)
+		http.Error(w, "File upload failed", 500)
 		return
 	}
-	defer resp.Body.Close()
+	fileRespBody, _ := io.ReadAll(fileResp.Body)
+	fileResp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode != 200 {
-		http.Error(w, fmt.Sprintf("STT API error: %s", string(respBody)), resp.StatusCode)
-		return
-	}
-
-	// Parse response and extract text
-	var result struct {
-		Text string `json:"text"`
-	}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		http.Error(w, "Failed to parse STT response", 500)
+	if fileResp.StatusCode != 200 {
+		log.Printf("[STT] Upload error: %s", string(fileRespBody))
+		http.Error(w, "File upload error", 500)
 		return
 	}
 
-	if result.Text == "" {
-		http.Error(w, "No speech detected", 200)
+	var uploadResp struct {
+		Data struct {
+			UploadedFiles []struct {
+				FileID string `json:"file_id"`
+			} `json:"uploaded_files"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(fileRespBody, &uploadResp); err != nil || len(uploadResp.Data.UploadedFiles) == 0 {
+		log.Printf("[STT] Upload parse error: %s", string(fileRespBody))
+		http.Error(w, "Upload parse error", 500)
+		return
+	}
+	fileID := uploadResp.Data.UploadedFiles[0].FileID
+	log.Printf("[STT] File uploaded, file_id: %s", fileID)
+
+	// Step 2: Get file details to retrieve OSS URL (with retry for rate limiting)
+	var detailsData []byte
+	var detailsStatusCode int
+	for attempt := 0; attempt < 3; attempt++ {
+		detailsReq, _ := http.NewRequest("GET", "https://dashscope.aliyuncs.com/api/v1/files/"+fileID, nil)
+		detailsReq.Header.Set("Authorization", authHeader)
+
+		detailsResp, err := client.Do(detailsReq)
+		if err != nil {
+			log.Printf("[STT] Get details failed: %v", err)
+			http.Error(w, "Get file details failed", 500)
+			return
+		}
+		detailsData, _ = io.ReadAll(detailsResp.Body)
+		detailsStatusCode = detailsResp.StatusCode
+		detailsResp.Body.Close()
+
+		if detailsStatusCode == 200 {
+			break
+		}
+
+		// Check if it's a throttling error
+		var errResp struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		}
+		json.Unmarshal(detailsData, &errResp)
+		if errResp.Code == "Throttling.RateQuota" {
+			log.Printf("[STT] Throttled on attempt %d, retrying in 2s...", attempt+1)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		log.Printf("[STT] Get details non-200: status=%d body=%s", detailsStatusCode, string(detailsData))
+		http.Error(w, "Get file details failed: "+string(detailsData), 500)
 		return
 	}
 
-	// Return recognized text
+	if detailsStatusCode != 200 {
+		log.Printf("[STT] Get details failed after retries: status=%d", detailsStatusCode)
+		http.Error(w, "Get file details failed after retries", 500)
+		return
+	}
+
+	var detailsResult struct {
+		Data struct {
+			URL string `json:"url"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(detailsData, &detailsResult); err != nil || detailsResult.Data.URL == "" {
+		log.Printf("[STT] Details parse error: status=%d body=%s", detailsStatusCode, string(detailsData))
+		http.Error(w, "Get file URL failed", 500)
+		return
+	}
+	fileURL := detailsResult.Data.URL
+	log.Printf("[STT] File URL: %s...", fileURL[:80])
+
+	// Step 3: Submit transcription task with OSS URL
+	// 强制指定 16k 采样率，确保与前端录制一致
+	taskPayload := map[string]interface{}{
+		"model": "paraformer-v2",
+		"input": map[string]interface{}{
+			"file_urls": []string{fileURL},
+		},
+		"parameters": map[string]interface{}{
+			"language_hints": []string{"zh"},
+			// 移除 sample_rate，让 DashScope 自动从 WAV 头部检测
+		},
+	}
+	taskJSON, _ := json.Marshal(taskPayload)
+	taskReq, _ := http.NewRequest("POST", "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription", bytes.NewBuffer(taskJSON))
+	taskReq.Header.Set("Content-Type", "application/json")
+	taskReq.Header.Set("Authorization", authHeader)
+	taskReq.Header.Set("X-DashScope-Async", "enable")
+
+	taskResp, err := client.Do(taskReq)
+	if err != nil {
+		log.Printf("[STT] Task submit failed: %v", err)
+		http.Error(w, "Task submit failed", 500)
+		return
+	}
+	taskRespBody, _ := io.ReadAll(taskResp.Body)
+	taskResp.Body.Close()
+
+	var taskResult struct {
+		Output struct {
+			TaskID     string `json:"task_id"`
+			TaskStatus string `json:"task_status"`
+		} `json:"output"`
+	}
+	if err := json.Unmarshal(taskRespBody, &taskResult); err != nil || taskResult.Output.TaskID == "" {
+		log.Printf("[STT] Task error: %s", string(taskRespBody))
+		http.Error(w, "Task submit error", 500)
+		return
+	}
+	taskID := taskResult.Output.TaskID
+	log.Printf("[STT] Task submitted, task_id: %s", taskID)
+
+	// Step 4: Poll for result (up to 15 times, 3s apart = ~45s max)
+	var text string
+	var errorCode, errorMsg string
+	for i := 0; i < 15; i++ {
+		time.Sleep(3 * time.Second)
+
+		pollReq, _ := http.NewRequest("GET", "https://dashscope.aliyuncs.com/api/v1/tasks/"+taskID, nil)
+		pollReq.Header.Set("Authorization", authHeader)
+
+		pollResp, err := client.Do(pollReq)
+		if err != nil {
+			continue
+		}
+		pollBody, _ := io.ReadAll(pollResp.Body)
+		pollResp.Body.Close()
+
+		var pollRes struct {
+			Output struct {
+				TaskStatus string `json:"task_status"`
+				Code       string `json:"code"`
+				Message    string `json:"message"`
+				Results    []struct {
+					Text string `json:"text"`
+				} `json:"results"`
+			} `json:"output"`
+		}
+		json.Unmarshal(pollBody, &pollRes)
+
+		log.Printf("[STT] Poll %d: status=%s", i+1, pollRes.Output.TaskStatus)
+
+		if pollRes.Output.TaskStatus == "SUCCEEDED" {
+			log.Printf("[STT] SUCCEEDED. Raw response: %s", string(pollBody))
+			if len(pollRes.Output.Results) > 0 {
+				text = pollRes.Output.Results[0].Text
+			}
+			break
+		} else if pollRes.Output.TaskStatus == "FAILED" {
+			errorCode = pollRes.Output.Code
+			errorMsg = pollRes.Output.Message
+			log.Printf("[STT] Task FAILED: code=%s message=%s", errorCode, errorMsg)
+			break
+		}
+	}
+
+	if text == "" {
+		if errorCode != "" {
+			// 特殊处理 DashScope 的 "SUCCESS_WITH_NO_VALID_FRAGMENT" 错误
+			if errorCode == "SUCCESS_WITH_NO_VALID_FRAGMENT" {
+				log.Printf("[STT] No valid speech detected in audio.")
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]interface{}{"text": "", "warning": "未检测到有效语音，请大声一点或靠近麦克风"})
+				return
+			}
+			http.Error(w, "Transcription failed: "+errorCode, 500)
+		} else {
+			log.Printf("[STT] Empty result. Raw response structure available.")
+			// Return the raw DashScope output for debugging
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"text": "", "warning": "未识别到语音 (DashScope returned empty text)"})
+			return
+		}
+		return
+	}
+
+	log.Printf("[STT] Success: %s", text)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"text": result.Text})
+	json.NewEncoder(w).Encode(map[string]interface{}{"text": text})
 }
 
 func main() {

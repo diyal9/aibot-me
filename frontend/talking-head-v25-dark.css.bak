@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>AI Digital Human - 全能讲师</title>
+    <style>
+        :root { --accent: #00f2ff; --bg: #050508; --panel-bg: rgba(255, 255, 255, 0.1); --board-bg: rgba(20, 25, 35, 0.85); }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; background: var(--bg); overflow: hidden; font-family: -apple-system, sans-serif; color: #fff; -webkit-tap-highlight-color: transparent; user-select: none; }
+        
+        /* 3D Canvas */
+        #c { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; cursor: pointer; }
+        
+        /* Background Grid Effect */
+        .bg-grid {
+            position: absolute; top: 0; left: 0; width: 200%; height: 200%;
+            background-image: 
+                linear-gradient(rgba(0, 242, 255, 0.12) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 242, 255, 0.12) 1px, transparent 1px);
+            background-size: 60px 60px;
+            transform: perspective(500px) rotateX(60deg) translateY(-100px) translateZ(-200px);
+            animation: bg-grid-move 20s linear infinite;
+            z-index: 0; pointer-events: none;
+        }
+        .bg-glow {
+            position: absolute; top: 30%; left: 50%; width: 100%; height: 60%;
+            background: radial-gradient(circle at center, rgba(0, 242, 255, 0.15) 0%, transparent 60%);
+            transform: translate(-50%, -50%); z-index: 0; pointer-events: none;
+        }
+        
+        @keyframes bg-grid-move {
+            0% { transform: perspective(500px) rotateX(60deg) translateY(0) translateZ(-200px); }
+            100% { transform: perspective(500px) rotateX(60deg) translateY(60px) translateZ(-200px); }
+        }
+        
+        /* UI 层 */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: flex; flex-direction: column; justify-content: space-between; }
+        
+        /* 顶部信息 */
+        .header-bar { display: flex; justify-content: space-between; padding-top: max(20px, env(safe-area-inset-top, 20px)); padding-left: 20px; padding-right: 20px; padding-bottom: 20px; }
+        .head { font-size: 14px; font-weight: 700; letter-spacing: 2px; color: rgba(255,255,255,0.8); text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+        .head span { color: var(--accent); }
+
+        /* 状态指示器 */
+        #status-pill { padding: 6px 12px; border-radius: 12px; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); font-size: 12px; color: #888; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; gap: 6px; transition: all 0.3s ease; }
+        #status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: #444; transition: background 0.3s; }
+        #status-pill.listening .dot { background: #00f2ff; box-shadow: 0 0 8px var(--accent); animation: pulse-blue 1.5s infinite; }
+        #status-pill.thinking .dot { background: #facc15; box-shadow: 0 0 8px #facc15; animation: pulse-yellow 1s infinite; }
+        #status-pill.speaking .dot { background: #ff4444; box-shadow: 0 0 8px #ff4444; animation: pulse-red 1s infinite; }
+        #status-pill.greeting .dot { background: #00ff88; box-shadow: 0 0 8px #00ff88; }
+        #status-pill.error .dot { background: #ff0000; box-shadow: 0 0 8px #ff0000; }
+        
+        /* 情绪指示器 */
+        #emotion-indicator { font-size: 16px; margin-right: 6px; animation: emotion-bounce 2s ease-in-out infinite; }
+        @keyframes emotion-bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+        @keyframes pulse-blue { 0%,100%{transform:scale(1)} 50%{transform:scale(1.5)} }
+        @keyframes pulse-yellow { 0%,100%{transform:scale(1)} 50%{transform:scale(1.5)} }
+        @keyframes pulse-red { 0%,100%{transform:scale(1)} 50%{transform:scale(1.5)} }
+
+        /* SVG 动态黑板 */
+        #blackboard-container {
+            position: absolute; top: 15%; left: 50%; transform: translateX(-50%);
+            width: 85%; max-width: 550px; height: 55%;
+            background: var(--board-bg);
+            border: 1px solid rgba(255,255,255,0.2); border-radius: 12px;
+            backdrop-filter: blur(10px);
+            opacity: 0; transform: translateX(-50%) scale(0.9);
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none; /* 默认不阻挡点击 */
+            z-index: 15; overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        #blackboard-container.show { opacity: 1; transform: translateX(-50%) scale(1); pointer-events: auto; }
+        #blackboard { width: 100%; height: 100%; }
+        .blog-item { 
+            background: rgba(255,255,255,0.05); margin-bottom:10px; padding:10px; border-radius:8px; 
+            border: 1px solid rgba(255,255,255,0.1); cursor:pointer; transition:all 0.2s;
+        }
+        .blog-item:hover { background: rgba(0,242,255,0.1); border-color: var(--accent); }
+        .blog-title { color: #fff; font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+        .blog-date { color: #888; font-size: 10px; margin-bottom: 4px; }
+        .blog-btn { 
+            background: var(--accent); color: #000; border:none; padding:4px 10px; border-radius:4px; 
+            font-size:12px; font-weight:bold; margin-top:5px; cursor:pointer; 
+        }
+        
+        /* 模式切换按钮 */
+        .mode-switcher {
+            position: absolute; top: 50%; right: 15px; transform: translateY(-50%);
+            display: flex; flex-direction: column; gap: 12px; z-index: 20;
+            opacity: 0.7; /* 默认可见 */ transition: opacity 0.3s; pointer-events: auto;
+        }
+        .mode-switcher:hover { opacity: 1; }
+        .mode-btn {
+            width: 44px; height: 44px; border-radius: 12px;
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+            color: #fff; font-size: 20px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; backdrop-filter: blur(5px); transition: all 0.2s;
+        }
+        .mode-btn:hover { background: var(--accent); color: #000; transform: scale(1.1); }
+        .mode-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+        /* 聊天气泡 */
+        #chat-bubble {
+            position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%);
+            width: 85%; max-width: 300px; text-align: center;
+            background: rgba(0,0,0,0.65); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 18px; padding: 12px 20px; color: #eee; font-size: 15px; line-height: 1.5;
+            opacity: 0; transform: translateX(-50%) translateY(20px); transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: none;
+        }
+        #chat-bubble.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+        #chat-bubble.user { background: rgba(0,242,255,0.15); border-color: rgba(0,242,255,0.3); color: var(--accent); }
+        #chat-bubble.ai { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+        #chat-bubble.error { background: rgba(255,68,68,0.2); border-color: rgba(255,68,68,0.3); color: #ffaaaa; }
+
+        /* 底部输入区域 */
+        .input-area { padding: 15px 20px 25px; background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%); pointer-events: auto; z-index: 20; }
+        .pill-container { display: flex; align-items: center; background: var(--panel-bg); border: 1px solid rgba(255,255,255,0.15); border-radius: 24px; height: 48px; width: 100%; max-width: 360px; margin: 0 auto; overflow: hidden; transition: all 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .pill-btn { height: 100%; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: #fff; font-size: 20px; cursor: pointer; }
+        .pill-btn:active { background: rgba(255,255,255,0.15); }
+        .voice-main-area { flex: 1; height: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; color: #fff; font-size: 15px; font-weight: 500; cursor: pointer; background: transparent; border: none; transition: background 0.3s; }
+        .voice-main-area.recording { color: #ff4444; animation: pulse-red 1.5s infinite; background: rgba(255,68,68,0.15); }
+        .voice-main-area.speaking-active { color: var(--accent); animation: pulse-blue 1.5s infinite; background: rgba(0,242,255,0.15); }
+        
+        .input-mode-content { display: none; flex: 1; height: 100%; align-items: center; padding: 0 4px; }
+        .pill-container.is-typing .voice-main-area { display: none; }
+        .pill-container.is-typing .switch-btn { display: none; }
+        .pill-container.is-typing .input-mode-content { display: flex; }
+        .pill-container.is-typing .voice-switch-btn { display: flex; }
+        .pill-container.is-typing .send-btn { display: flex; }
+        input { flex: 1; height: 100%; background: transparent; border: none; color: #fff; font-size: 16px; outline: none; padding: 0 8px; }
+        .voice-switch-btn { display: none; color: #888; }
+        .send-btn { display: none; color: var(--accent); font-size: 22px; }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        #loader { position: absolute; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+        .spinner { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        #loader-text { margin-top: 15px; font-size: 12px; color: #666; }
+        #start-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.85); z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .start-btn { padding: 15px 40px; background: var(--accent); color: #000; font-size: 18px; font-weight: bold; border-radius: 30px; border: none; box-shadow: 0 0 20px var(--accent); }
+        #error-msg { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ff4444; text-align: center; background: #111; padding: 20px; border-radius: 10px; z-index: 300; }
+    </style>
+</head>
+<body>
+    <div class="bg-glow"></div>
+    <div class="bg-grid"></div>
+    <div id="c"></div>
+    
+    <!-- SVG 动态黑板 -->
+    <div id="blackboard-container">
+        <svg id="blackboard" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <filter id="glow">
+                    <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+                    <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+            </defs>
+            <!-- 绘制层 -->
+            <g id="board-content"></g>
+        </svg>
+        <!-- 博客列表层 (HTML overlay) -->
+        <div id="blog-list-overlay" style="display:none; width:100%; height:100%; padding:20px; overflow-y:auto; box-sizing:border-box;">
+            <div style="color:#00f2ff; font-size:18px; font-weight:bold; margin-bottom:15px; text-align:center;">📝 最新博客</div>
+            <div id="blog-list-items"></div>
+        </div>
+    </div>
+
+    <!-- 模式切换按钮 -->
+    <div class="mode-switcher">
+        <button class="mode-btn" onclick="triggerMode('math')" title="数学辅导模式">📐</button>
+        <button class="mode-btn" onclick="triggerMode('blog')" title="博客演讲模式">📝</button>
+    </div>
+
+    <div id="ui-layer">
+        <div class="header-bar">
+            <div class="head"><span>AI</span> TEACHER <span id="version-tag" style="cursor:pointer; opacity:0.6; font-size:11px; font-weight:400; margin-left:8px;">v0.4.33</span></div>
+            <div id="status-pill"><span id="emotion-indicator">😊</span><div class="dot"></div><span id="status-text">IDLE</span></div>
+        </div>
+        
+        <div id="chat-bubble">你好，我是你的 AI 讲师。</div>
+        
+        <div class="input-area">
+            <div class="pill-container" id="pill">
+                <button class="voice-main-area" id="voice-zone"><span id="voice-icon">🎤</span><span id="voice-text">按住说话</span></button>
+                <button class="pill-btn switch-btn" id="switch-to-text">⌨️</button>
+                <button class="pill-btn voice-switch-btn" id="switch-to-voice">🎤</button>
+                <div class="input-mode-content"><input id="inp" type="text" placeholder="输入消息..." autocomplete="off"></div>
+                <button class="pill-btn send-btn" id="send-btn">➤</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="loader"><div class="spinner"></div><div id="loader-text">初始化模型...</div></div>
+    <div id="start-overlay" style="display:none;"><div style="font-size: 40px; margin-bottom: 20px;">👋</div><div class="start-btn" id="start-btn">点击开始互动</div></div>
+    <div id="debug-log" style="position:fixed; bottom:10px; left:10px; color:red; font-size:10px; z-index:9999; background:rgba(0,0,0,0.7); padding:5px; display:none;"></div>
+    <script>
+        // Pre-module check (hidden by default, shown via version tag click)
+        const dbg = document.getElementById('debug-log');
+        dbg.style.display = 'none'; // 默认隐藏
+        dbg.innerHTML += 'Browser check: ';
+        if (typeof window.onerror !== 'undefined') dbg.innerHTML += 'OK. ';
+        if (HTMLScriptElement.supports && HTMLScriptElement.supports('module')) dbg.innerHTML += 'Module supported. ';
+        else dbg.innerHTML += 'Module NOT supported. ';
+    </script>
+    <div id="error-msg"><div id="error-content"></div></div>
+
+    <!-- Local Libs (Downloaded) -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    
+    <script type="module">
+        // DYNAMIC IMPORTS with cache buster
+        (async () => {
+            const dbg = document.getElementById('debug-log');
+            dbg.innerHTML += 'Attempting Dynamic Imports...<br>';
+            const cacheBuster = '?v=0.4.33';
+            try {
+                const THREE = await import('https://47.107.172.201:8089/libs/three.esm.js' + cacheBuster);
+                dbg.innerHTML += 'Three Loaded.<br>';
+                
+                const GLTF = await import('https://47.107.172.201:8089/libs/GLTFLoader.esm.js' + cacheBuster);
+                dbg.innerHTML += 'Loader Loaded.<br>';
+                
+                const VRM = await import('https://47.107.172.201:8089/libs/three-vrm.esm.js' + cacheBuster);
+                dbg.innerHTML += 'VRM Loaded.<br>';
+
+                initClassic(THREE, GLTF.GLTFLoader, VRM.VRMLoaderPlugin, VRM.VRMUtils);
+            } catch (e) {
+                dbg.innerHTML += `[Import Failed] ${e.message}<br>`;
+                console.error('Import failed:', e);
+            }
+        })();
+
+        // Error reporting
+        window.addEventListener('error', (e) => {
+            const el = document.getElementById('debug-log');
+            el.innerHTML += `[Global Error] ${e.message}<br>`;
+        });
+
+        function initClassic(THREE, GLTFLoader, VRMLoaderPlugin, VRMUtils) {
+            // Expose to window just in case
+            window.THREE = THREE;
+            window.GLTFLoader = GLTFLoader;
+            window.VRMLoaderPlugin = VRMLoaderPlugin;
+            window.VRMUtils = VRMUtils;
+
+            const CACHE_KEY = 'avatar-vrm-cache-classic';
+            const MODEL_URL = '/models/AvatarSample_C.vrm';
+            
+            // === 个性情绪系统 ===
+            const EMOTIONS = { HAPPY: 'happy', SAD: 'sad', ANGRY: 'angry', SURPRISED: 'surprised', CALM: 'calm', EXCITED: 'excited', FOCUS: 'focus' };
+            const PERSONALITY = {
+                name: '小星老师',
+                baseline: { happy: 0.5, calm: 0.3, excited: 0.1, surprised: 0.05, sad: 0.02, angry: 0.01 },
+                traits: { optimistic: 0.8, sensitive: 0.6, curious: 0.9, playful: 0.7, empathetic: 0.8 }
+            };
+            let emotionState = { current: EMOTIONS.CALM, intensity: 0.5, values: { happy: 0.6, calm: 0.3, excited: 0.1, surprised: 0, sad: 0, angry: 0 }, history: [], mood: 0.5, energy: 0.7, lastChange: Date.now() };
+            const EMOTION_TRIGGERS = { happy: ['哈哈', '笑', '开心', '棒', '好', '喜欢', '爱', '赞', '谢谢', '感谢', '👍', '❤️', '😄', '嘻嘻', '好玩', '有趣'], surprised: ['哇', '天哪', '什么', '真的吗', '竟然', '居然', '不会吧', '😮', '！？', '！'], sad: ['难过', '伤心', '哭', '累', '烦', '烦死', '糟糕', '讨厌', '恨', '😢', '😭', '哎', '叹气', '无聊', '孤独', '寂寞'], angry: ['生气', '愤怒', '滚', '笨蛋', '垃圾', '有病', '傻', '蠢', '烦人', '讨厌', '😡', '💢', '气死', '闭嘴'], excited: ['太', '超', '非常', '极了', '疯狂', '爆炸', '燃', '冲冲冲', '🔥', '💥', '激动'] };
+            const EMOTION_EXPRESSIONS = { [EMOTIONS.HAPPY]: { happy: 0.6, angry: 0, sad: 0, surprise: 0, relaxed: 0.3 }, [EMOTIONS.EXCITED]: { happy: 0.8, angry: 0, sad: 0, surprise: 0.4, relaxed: 0 }, [EMOTIONS.CALM]: { happy: 0, angry: 0, sad: 0, surprise: 0, relaxed: 0.5 }, [EMOTIONS.SURPRISED]: { happy: 0, angry: 0, sad: 0, surprise: 0.8, relaxed: 0 }, [EMOTIONS.SAD]: { happy: 0, angry: 0, sad: 0.7, surprise: 0, relaxed: 0 }, [EMOTIONS.ANGRY]: { happy: 0, angry: 0.8, sad: 0.1, surprise: 0, relaxed: 0 }, [EMOTIONS.FOCUS]: { happy: 0.1, angry: 0, sad: 0, surprise: 0.2, relaxed: 0.2 } };
+            const EMOTION_BODY_LANG = { [EMOTIONS.HAPPY]: { headTilt: 0.1, headBounce: 0.03, armSpread: 0.1, bounceFreq: 1.5 }, [EMOTIONS.EXCITED]: { headTilt: 0.15, headBounce: 0.06, armSpread: 0.2, bounceFreq: 2.5 }, [EMOTIONS.CALM]: { headTilt: 0, headBounce: 0.01, armSpread: 0, bounceFreq: 0.8 }, [EMOTIONS.SURPRISED]: { headTilt: -0.05, headBounce: 0, armSpread: 0.15, bounceFreq: 0 }, [EMOTIONS.SAD]: { headTilt: -0.15, headBounce: 0, armSpread: -0.05, bounceFreq: 0 }, [EMOTIONS.ANGRY]: { headTilt: 0, headBounce: 0.04, armSpread: 0.1, bounceFreq: 3.0 }, [EMOTIONS.FOCUS]: { headTilt: -0.1, headBounce: 0, armSpread: -0.1, bounceFreq: 0.5 } };
+            function detectEmotion(text) { if (!text) return null; let scores = { happy: 0, surprised: 0, sad: 0, angry: 0, excited: 0 }; for (const [emotion, keywords] of Object.entries(EMOTION_TRIGGERS)) { for (const kw of keywords) { if (text.includes(kw)) { scores[emotion] += 1; if (kw.includes('！') || kw.includes('？')) scores[emotion] *= 1.5; } } } scores.happy *= PERSONALITY.traits.optimistic; scores.sad *= PERSONALITY.traits.sensitive; scores.surprised *= PERSONALITY.traits.curious; const maxScore = Math.max(...Object.values(scores)); if (maxScore < 1) return null; return Object.entries(scores).find(([_, v]) => v === maxScore)?.[0] || null; }
+            function updateEmotion(newEmotion, intensity = 0.6) { if (!newEmotion) return; emotionState.current = newEmotion; emotionState.intensity = Math.min(1, intensity * PERSONALITY.traits.sensitive); emotionState.lastChange = Date.now(); emotionState.history.push({ emotion: newEmotion, time: Date.now(), intensity: emotionState.intensity }); if (['happy', 'excited', 'calm'].includes(newEmotion)) { emotionState.mood = Math.min(1, emotionState.mood + 0.1 * emotionState.intensity); emotionState.energy = Math.min(1, emotionState.energy + 0.05); } else { emotionState.mood = Math.max(0, emotionState.mood - 0.15 * emotionState.intensity); emotionState.energy = Math.max(0.3, emotionState.energy - 0.1); } }
+            function decayEmotions(delta) { const decayRate = 0.15; for (const key of Object.keys(emotionState.values)) { const baseline = PERSONALITY.baseline[key] || 0; emotionState.values[key] = THREE.MathUtils.lerp(emotionState.values[key], baseline, decayRate * delta); } const elapsed = (Date.now() - emotionState.lastChange) / 1000; if (elapsed > 3) { emotionState.intensity = Math.max(0, emotionState.intensity - 0.05 * delta); if (emotionState.intensity < 0.1) { emotionState.current = emotionState.mood > 0.4 ? EMOTIONS.CALM : EMOTIONS.SAD; emotionState.intensity = 0.3; } } emotionState.energy = THREE.MathUtils.lerp(emotionState.energy, 0.7, 0.02 * delta); }
+            function applyEmotionToAvatar() { if (!vrm) return; const expr = EMOTION_EXPRESSIONS[emotionState.current]; if (!expr) return; const intensity = emotionState.intensity; for (const [key, value] of Object.entries(expr)) { vrm.expressionManager.setValue(key, value * intensity); } }
+
+            // === 状态机 ===
+            const STATES = { IDLE: 'idle', LISTENING: 'listening', THINKING: 'thinking', SPEAKING: 'speaking', GREETING: 'greeting', TEACHING: 'teaching' };
+            let currentState = STATES.IDLE;
+            const statusPill = document.getElementById('status-pill'); const statusText = document.getElementById('status-text'); const voiceZone = document.getElementById('voice-zone');
+            const emotionEl = document.getElementById('emotion-indicator');
+            const EMOTION_EMOJIS = { happy: '😊', sad: '😔', angry: '😤', surprised: '😮', calm: '😌', excited: '🤩', focus: '🧐' };
+            const EMOTION_LABELS = { happy: '开心', sad: '难过', angry: '生气', surprised: '惊讶', calm: '平静', excited: '兴奋', focus: '专注' };
+            function updateEmotionUI() { if (!emotionEl) return; emotionEl.textContent = EMOTION_EMOJIS[emotionState.current] || '😐'; emotionEl.title = `${PERSONALITY.name} 当前${EMOTION_LABELS[emotionState.current]} (${Math.round(emotionState.intensity * 100)}%)`; const speed = 0.5 + emotionState.energy * 2; emotionEl.style.animationDuration = `${2 / speed}s`; }
+            function setState(newState) { if (currentState === newState) return; currentState = newState; statusPill.className = newState === STATES.IDLE ? '' : newState; statusText.textContent = newState.toUpperCase(); if (newState === STATES.SPEAKING || newState === STATES.TEACHING) { voiceZone.classList.add('speaking-active'); } else { voiceZone.classList.remove('speaking-active'); } }
+
+            // === 3D 场景 ===
+            const scene = new THREE.Scene(); scene.background = null;
+            const camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.1, 100); camera.position.set(0, 1.2, 3.5);
+            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight); renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
+            renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.outputColorSpace = THREE.SRGBColorSpace;
+            document.getElementById('c').appendChild(renderer.domElement);
+
+            scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.6));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.2); dirLight.position.set(1, 2, 2); scene.add(dirLight);
+            scene.add(new THREE.DirectionalLight(0xffffff, 0.4).translateX(-2).translateZ(-2));
+            
+            // Rim light to separate character from background
+            const rimLight = new THREE.DirectionalLight(0x00f2ff, 1.0); rimLight.position.set(0, 1.5, -2); scene.add(rimLight);
+
+            const loader = new GLTFLoader(); loader.register(p => new VRMLoaderPlugin(p));
+            let vrm = null, clock = new THREE.Clock();
+            let targetRotY = 0, currentRotY = 0;
+            let mouseX = 0, mouseY = 0;
+            window.addEventListener('mousemove', (e) => { mouseX = (e.clientX / window.innerWidth) * 2 - 1; mouseY = -(e.clientY / window.innerHeight) * 2 + 1; });
+            let greetingAnim = { active: false, t: 0 };
+            let charTargetPos = { x: 0, y: 0.1, z: 0 };
+
+            async function loadVRMBuffer() {
+                dbg.innerHTML += 'Loading VRM...<br>';
+                return new Promise((resolve, reject) => {
+                    const req = indexedDB.open('vrm-cache', 1);
+                    req.onupgradeneeded = (e) => e.target.result.createObjectStore('vrm');
+                    req.onsuccess = (e) => {
+                        const db = e.target.result; const tx = db.transaction('vrm', 'readonly'); const store = tx.objectStore('vrm');
+                        const getReq = store.get(CACHE_KEY);
+                        getReq.onsuccess = () => { 
+                            if (getReq.result) { dbg.innerHTML += 'VRM from cache.<br>'; resolve(getReq.result); } 
+                            else { 
+                                dbg.innerHTML += 'Fetching VRM (15MB, please wait)...<br>';
+                                document.getElementById('loader-text').innerText = '下载模型中 (约15MB)...'; 
+                                
+                                // Fetch with timeout and retry
+                                const fetchWithTimeout = (url, timeout = 120000) => {
+                                    return Promise.race([
+                                        fetch(url, { 
+                                            headers: { 'Accept': 'model/vrm, application/octet-stream, */*' },
+                                            cache: 'force-cache'
+                                        }),
+                                        new Promise((_, rej) => setTimeout(() => rej(new Error('Download timeout (120s)')), timeout))
+                                    ]);
+                                };
+                                
+                                fetchWithTimeout(MODEL_URL).then(res => {
+                                    if (!res.ok) throw new Error(`HTTP ${res.status} - ${res.statusText}`);
+                                    const contentLength = res.headers.get('content-length');
+                                    const total = contentLength ? parseInt(contentLength) : 0;
+                                    let loaded = 0;
+                                    
+                                    // For large files, read as stream to show progress
+                                    if (total > 5000000) { // >5MB
+                                        const reader = res.body.getReader();
+                                        const chunks = [];
+                                        const readStream = () => reader.read().then(({ done, value }) => {
+                                            if (done) {
+                                                const buf = new Uint8Array(loaded);
+                                                let offset = 0;
+                                                for (const chunk of chunks) {
+                                                    buf.set(chunk, offset);
+                                                    offset += chunk.length;
+                                                }
+                                                return buf.buffer;
+                                            }
+                                            chunks.push(value);
+                                            loaded += value.length;
+                                            const pct = total ? Math.round((loaded / total) * 100) : '?';
+                                            document.getElementById('loader-text').innerText = `下载中... ${pct}%`;
+                                            return readStream();
+                                        });
+                                        return readStream();
+                                    }
+                                    return res.arrayBuffer();
+                                }).then(buf => { 
+                                    dbg.innerHTML += 'VRM fetched (' + (buf.byteLength || buf.length) + ' bytes).<br>';
+                                    const wTx = db.transaction('vrm', 'readwrite'); wTx.objectStore('vrm').put(buf, CACHE_KEY); resolve(buf); 
+                                }).catch(err => { dbg.innerHTML += 'VRM fetch error: ' + err.message + '<br>'; reject(err); }); 
+                            } 
+                        };
+                    };
+                });
+            }
+
+            loadVRMBuffer().then(buf => {
+                dbg.innerHTML += 'Parsing VRM...<br>';
+                loader.parse(buf, '', (gltf) => {
+                    vrm = gltf.userData.vrm; if (!vrm) { throw new Error('VRM 解析失败'); }
+                    if (vrm.meta.metaVersion === '0') VRMUtils.rotateVRM0(vrm);
+                    vrm.scene.rotation.y = Math.PI; scene.add(vrm.scene); vrm.scene.scale.set(0.9, 0.9, 0.9); vrm.scene.position.set(0, 0.1, 0);
+                    vrm.scene.traverse(obj => { if (obj.isMesh && obj.material) { obj.material.needsUpdate = true; if (obj.material.map) obj.material.map.colorSpace = THREE.SRGBColorSpace; } });
+                    document.getElementById('loader').style.display = 'none';
+                    document.getElementById('start-overlay').style.display = 'flex';
+                    dbg.innerHTML += 'VRM Ready! Interactive.<br>';
+                });
+            }).catch(e => { 
+                dbg.innerHTML += 'VRM Error: ' + e.message + '<br>';
+                document.getElementById('loader').style.display = 'none'; 
+                document.getElementById('error-msg').style.display = 'block'; 
+                document.getElementById('error-content').innerText = `加载失败: ${e.message}`; 
+            });
+
+            // === 动画循环 ===
+            let mouthTarget = 0; let blinkTimer = 0; let isSpeaking = false;
+            let isPlayingAudio = false; let currentMouthOpen = 0;
+
+            function animate() {
+                requestAnimationFrame(animate);
+                const delta = clock.getDelta(); const t = clock.getElapsedTime();
+                
+                if (vrm) {
+                    vrm.update(delta);
+                    currentRotY = THREE.MathUtils.lerp(currentRotY, targetRotY, 0.1);
+                    vrm.scene.rotation.y = Math.PI + currentRotY;
+                    vrm.scene.position.x = THREE.MathUtils.lerp(vrm.scene.position.x, charTargetPos.x, 0.05);
+                    vrm.scene.position.y = charTargetPos.y + Math.sin(t * 1.5) * 0.015;
+                    vrm.scene.position.z = THREE.MathUtils.lerp(vrm.scene.position.z, charTargetPos.z, 0.05);
+
+                    const head = vrm.humanoid.getNormalizedBoneNode('head');
+                    const chest = vrm.humanoid.getNormalizedBoneNode('chest');
+                    const lArm = vrm.humanoid.getNormalizedBoneNode('leftUpperArm');
+                    const rArm = vrm.humanoid.getNormalizedBoneNode('rightUpperArm');
+                    const rForeArm = vrm.humanoid.getNormalizedBoneNode('rightLowerArm');
+
+                    let targetH = { x: 0, y: 0, z: 0 }; let targetC = { x: 0, y: 0, z: 0 };
+                    let targetLA = { x: 0, y: 0, z: 1.6 }; let targetRA = { x: 0, y: 0, z: -1.6 }; let targetRFA = { x: 0, y: 0, z: 0 };
+
+                    const bodyLang = EMOTION_BODY_LANG[emotionState.current] || EMOTION_BODY_LANG[EMOTIONS.CALM];
+                    targetH.x = Math.sin(t * (bodyLang.bounceFreq || 0.8)) * (bodyLang.headBounce || 0.02);
+                    targetH.z = Math.sin(t * 0.6) * (bodyLang.headTilt || 0);
+                    targetLA.z = 1.6 + (bodyLang.armSpread || 0); targetRA.z = -1.6 - (bodyLang.armSpread || 0);
+
+                    if (greetingAnim.active) {
+                        greetingAnim.t += delta; const p = Math.min(greetingAnim.t / 0.5, 1);
+                        if (greetingAnim.t < 3.0) {
+                            const wave = Math.sin(greetingAnim.t * 6) * (greetingAnim.waveAmp || 0.2);
+                            targetRA.z = THREE.MathUtils.lerp(-1.6, -1.5, p); targetRA.x = THREE.MathUtils.lerp(0, greetingAnim.xAngle || 0.5, p);
+                            targetRA.y = THREE.MathUtils.lerp(0, greetingAnim.yAngle || -0.3, p); targetRFA.x = THREE.MathUtils.lerp(0, greetingAnim.elbowAngle || 1.2, p);
+                            targetRFA.z = wave;
+                        } else { greetingAnim.active = false; if(currentState === STATES.GREETING) setState(STATES.IDLE); }
+                    } else if (currentState === STATES.THINKING) { targetH.z = 0.2; targetH.y = -0.15; targetRA.z = -0.8; targetRA.x = 0.6; } 
+                    else if (currentState === STATES.SPEAKING || currentState === STATES.TEACHING) { targetH.x += Math.abs(Math.sin(t * 6)) * 0.06; targetC.x = -0.05; targetLA.z = 1.4; targetRA.z = -1.4; }
+
+                    targetH.x += mouseY * 0.15; targetH.y += mouseX * 0.35;
+
+                    function clampArm(target, minZ, maxZ, minX, maxX, minY, maxY) { target.z = Math.max(minZ, Math.min(maxZ, target.z)); target.x = Math.max(minX, Math.min(maxX, target.x)); target.y = Math.max(minY, Math.min(maxY, target.y)); return target; }
+                    clampArm(targetRA, -3.0, -1.0, -2.0, 1.5, -1.5, 1.5); clampArm(targetRFA, -2.5, 0.5, -0.5, 0.5, -1.0, 1.0); clampArm(targetLA, 1.0, 2.5, -1.0, 1.0, -1.0, 1.0);
+
+                    const speed = 0.1;
+                    if (head) { head.rotation.x = THREE.MathUtils.lerp(head.rotation.x, targetH.x, speed); head.rotation.y = THREE.MathUtils.lerp(head.rotation.y, targetH.y, speed); head.rotation.z = THREE.MathUtils.lerp(head.rotation.z, targetH.z, speed); }
+                    if (chest) chest.rotation.x = THREE.MathUtils.lerp(chest.rotation.x, targetC.x, speed);
+                    if (lArm) lArm.rotation.z = THREE.MathUtils.lerp(lArm.rotation.z, targetLA.z, speed);
+                    if (rArm) { rArm.rotation.z = THREE.MathUtils.lerp(rArm.rotation.z, targetRA.z, speed); rArm.rotation.x = THREE.MathUtils.lerp(rArm.rotation.x, targetRA.x, speed); rArm.rotation.y = THREE.MathUtils.lerp(rArm.rotation.y, targetRA.y, speed); }
+                    if (rForeArm) rForeArm.rotation.x = THREE.MathUtils.lerp(rForeArm.rotation.x, targetRFA.x, speed);
+
+                    blinkTimer += delta; if (blinkTimer > 3.0 + Math.random() * 2.0) { vrm.expressionManager.setValue('blink', 1); setTimeout(() => vrm.expressionManager.setValue('blink', 0), 150); blinkTimer = 0; }
+                    decayEmotions(delta); applyEmotionToAvatar();
+                    if (Math.floor(t * 4) % 2 === 0) updateEmotionUI();
+
+                    if (isPlayingAudio) mouthTarget = THREE.MathUtils.lerp(mouthTarget, currentMouthOpen, 0.2);
+                    else mouthTarget = THREE.MathUtils.lerp(mouthTarget, 0, 0.2);
+                    vrm.expressionManager.setValue('aa', mouthTarget);
+                }
+                renderer.render(scene, camera);
+            }
+            animate();
+            dbg.innerHTML += 'Animation loop started.<br>';
+
+            // === 交互 ===
+            let audioUnlocked = false;
+            const startBtn = document.getElementById('start-btn');
+            if (startBtn) {
+                startBtn.onclick = () => { 
+                    dbg.innerHTML += 'Start button clicked!<br>';
+                    audioUnlocked = true; 
+                    document.getElementById('start-overlay').style.display = 'none'; 
+                    updateEmotion('happy', 0.7); 
+                    greetingAnim = { active: true, t: 0, xAngle: 0.5, yAngle: -0.3, elbowAngle: 1.2, waveAmp: 0.2 }; 
+                    showChat(`${PERSONALITY.name}: 你好呀！我是${PERSONALITY.name}，你的AI讲师~`, 'ai'); 
+                    speak(`你好呀！我是${PERSONALITY.name}，你的AI讲师`); 
+                };
+            }
+
+            const chatBubble = document.getElementById('chat-bubble');
+            function showChat(text, type) { chatBubble.textContent = text; chatBubble.className = `show ${type}`; }
+
+            // === 语音 & TTS ===
+            let lipSyncFrame;
+            function startSimulatedLipSync(durationMs) {
+                isPlayingAudio = true; const startTime = Date.now();
+                function animateMouth() {
+                    const elapsed = Date.now() - startTime;
+                    if (elapsed >= durationMs) { isPlayingAudio = false; currentMouthOpen = 0; return; }
+                    const t = elapsed / 1000;
+                    currentMouthOpen = (Math.sin(t * 12) * 0.3 + 0.4) * (0.8 + Math.random() * 0.4);
+                    if (elapsed > durationMs * 0.9) currentMouthOpen *= (durationMs - elapsed) / (durationMs * 0.1);
+                    requestAnimationFrame(animateMouth);
+                }
+                requestAnimationFrame(animateMouth);
+            }
+            function stopSimulatedLipSync() { isPlayingAudio = false; currentMouthOpen = 0; }
+
+            // === 语音 & TTS ===
+            let cachedVoices = [];
+            // 初始化语音列表
+            function initVoices() {
+                cachedVoices = speechSynthesis.getVoices();
+                if (cachedVoices.length === 0) {
+                    speechSynthesis.onvoiceschanged = () => { 
+                        cachedVoices = speechSynthesis.getVoices(); 
+                    };
+                }
+            }
+            initVoices();
+
+            // 兜底：使用 speechSynthesis
+            function fallbackSpeak(text) {
+                return new Promise((resolve) => {
+                    const estDuration = text.length * 350;
+                    startSimulatedLipSync(estDuration);
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = 'zh-CN';
+                    
+                    const voices = cachedVoices.length > 0 ? cachedVoices : speechSynthesis.getVoices();
+                    const zhVoices = voices.filter(v => v.lang.includes('zh') || v.lang.includes('CN'));
+                    const maleVoice = zhVoices.find(v => v.name.toLowerCase().includes('yun-yang'));
+                    
+                    if (maleVoice) {
+                        utterance.voice = maleVoice;
+                        utterance.pitch = 1.0;
+                        utterance.rate = 0.95;
+                        console.log('TTS fallback: Real Male (Yun-yang)');
+                    } else {
+                        const defaultVoice = zhVoices[0] || voices[0]; 
+                        utterance.voice = defaultVoice;
+                        utterance.pitch = 0.45;
+                        utterance.rate = 0.95;
+                        console.log('TTS fallback: Simulated Deep Male');
+                    }
+
+                    utterance.onend = () => { stopSimulatedLipSync(); resolve(); };
+                    utterance.onerror = () => { stopSimulatedLipSync(); resolve(); };
+                    speechSynthesis.speak(utterance);
+                });
+            }
+
+            // 主要 TTS：Supertonic 服务端 → 兜底 speechSynthesis
+            async function speak(text, signal = null) {
+                return new Promise(async (resolve) => {
+                    if (!text) { resolve(); return; }
+                    
+                    try {
+                        const resp = await fetch('/tts', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text, voice: 'M1', speed: 1.0 })
+                        });
+
+                        const contentType = resp.headers.get('Content-Type') || '';
+                        
+                        if (contentType.includes('audio')) {
+                            // Audio response (WAV or MP3)
+                            const blob = await resp.blob();
+                            const url = URL.createObjectURL(blob);
+                            const audio = new Audio(url);
+                            
+                            // 音频开始播放时才启动口型，避免空等延迟
+                            audio.onplaying = () => {
+                                const dur = audio.duration > 0 ? audio.duration * 1000 : text.length * 350;
+                                startSimulatedLipSync(dur);
+                            };
+                            
+                            audio.onended = () => { 
+                                URL.revokeObjectURL(url); 
+                                stopSimulatedLipSync(); 
+                                resolve(); 
+                            };
+                            audio.onerror = () => { 
+                                URL.revokeObjectURL(url); 
+                                console.log('TTS audio error, falling back to speechSynthesis');
+                                fallbackSpeak(text).then(resolve); 
+                            };
+                            await audio.play();
+                        } else {
+                            // 兜底：服务端返回 fallback JSON
+                            const result = await resp.json();
+                            console.log('TTS:', result.reason, '- using speechSynthesis');
+                            fallbackSpeak(text).then(resolve);
+                        }
+                    } catch (e) {
+                        console.log('TTS fetch error, falling back to speechSynthesis:', e.message);
+                        fallbackSpeak(text).then(resolve);
+                    }
+                });
+            }
+
+            // === 射线 & 拖拽 ===
+            const raycaster = new THREE.Raycaster(); const mouseVec = new THREE.Vector2();
+            let isDragging = false; let pointerDownX = 0; let pointerDownY = 0;
+            let isTouchingCharacter = false; // 标记触摸是否在角色上
+            const interactEl = renderer.domElement;
+            
+            interactEl.addEventListener('pointerdown', (e) => { 
+                isDragging = false; pointerDownX = e.clientX; pointerDownY = e.clientY;
+                // 立即检测点击位置是否在角色上
+                if (vrm) {
+                    mouseVec.x = (e.clientX / window.innerWidth) * 2 - 1;
+                    mouseVec.y = -(e.clientY / window.innerHeight) * 2 + 1;
+                    raycaster.setFromCamera(mouseVec, camera);
+                    const hits = raycaster.intersectObjects(vrm.scene.children, true);
+                    isTouchingCharacter = hits.length > 0;
+                }
+            });
+            
+            interactEl.addEventListener('pointermove', (e) => { 
+                mouseX = (e.clientX / window.innerWidth) * 2 - 1; mouseY = -(e.clientY / window.innerHeight) * 2 + 1; 
+                // 只有触摸在角色上时才允许旋转
+                if (isTouchingCharacter && e.buttons === 1) { 
+                    const dx = e.clientX - pointerDownX; const dy = e.clientY - pointerDownY; 
+                    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) { isDragging = true; targetRotY += dx * 0.008; pointerDownX = e.clientX; pointerDownY = e.clientY; } 
+                } 
+            });
+            
+            interactEl.addEventListener('pointerup', (e) => { 
+                // 仅在未拖动且触摸在角色上时触发问候
+                if (!isDragging && isTouchingCharacter) { 
+                    updateEmotion('happy', 0.5); greetingAnim = { active: true, t: 0, xAngle: 0.2 + Math.random() * 0.3, yAngle: -0.2 + Math.random() * 0.4, elbowAngle: -1.0 + Math.random() * 0.5, waveAmp: 0.15 + Math.random() * 0.15 }; 
+                    setState(STATES.GREETING); const msg = ["你好呀！很高兴见到你~", "嗨！今天过得怎么样？", "嘿！有什么想聊的吗？"][Math.floor(Math.random() * 3)]; showChat(msg, 'ai'); speak(msg); 
+                } 
+                isDragging = false; isTouchingCharacter = false; 
+            });
+
+            // === AI 对话 ===
+            let textMode = true;
+            const doSend = async (text, voiceMode = false) => {
+                if (!text) return;
+                if (voiceMode && speechSynthesis.speaking) return;
+                showChat(text, 'user'); textMode = !voiceMode;
+                const userEmotion = detectEmotion(text); if (userEmotion) updateEmotion(userEmotion === 'happy' ? userEmotion : 'surprised', 0.6);
+                setState(STATES.THINKING); 
+                try {
+                    const response = await fetch('/llm/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) });
+                    if (!response.ok) throw new Error(`服务器错误 (${response.status})`);
+                    const reader = response.body.getReader(); const decoder = new TextDecoder(); let fullReply = '';
+                    if (textMode) {
+                        while (true) { const { done, value } = await reader.read(); if (done) break; const chunk = decoder.decode(value, { stream: true }); const lines = chunk.split('\n'); for (const line of lines) { if (line.startsWith('data: ')) { const content = line.slice(6); if (content === '[DONE]') continue; fullReply += content; chatBubble.textContent = fullReply; } } }
+                    } else {
+                        let buffer = ''; while (true) { const { done, value } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true }); }
+                        const data = JSON.parse(buffer); const reply = data.choices?.[0]?.message?.content || data.content || "收到，但解析失败";
+                        showChat(reply, 'ai'); speak(reply);
+                    }
+                } catch (e) { showChat(e.message, 'error'); } finally { setState(STATES.IDLE); }
+            };
+            document.getElementById('send-btn').onclick = () => { const text = document.getElementById('inp').value.trim(); if (text) { document.getElementById('inp').value = ''; document.getElementById('pill').classList.remove('is-typing'); doSend(text, false); } };
+            document.getElementById('inp').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) document.getElementById('send-btn').click(); });
+
+            // === 输入模式切换 ===
+            const pill = document.getElementById('pill');
+            document.getElementById('switch-to-text').onclick = () => pill.classList.add('is-typing');
+            document.getElementById('switch-to-voice').onclick = () => pill.classList.remove('is-typing');
+
+            // 语音输入
+            let isRecording = false; let mediaRecorder = null;
+            window.isVoiceBusy = () => currentState === STATES.SPEAKING || currentState === STATES.TEACHING;
+            voiceZone.onpointerdown = (e) => { e.preventDefault(); if (window.isVoiceBusy()) return; startRecording(); };
+            voiceZone.onpointerup = (e) => { e.preventDefault(); if (isRecording) stopRecordingAndSend(); };
+            voiceZone.onpointerleave = (e) => { e.preventDefault(); if (isRecording) stopRecordingAndSend(); };
+            function startRecording() {
+                navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                    mediaRecorder = new MediaRecorder(stream); const chunks = [];
+                    mediaRecorder.ondataavailable = e => chunks.push(e.data);
+                    mediaRecorder.onstop = async () => {
+                        try {
+                            const blob = new Blob(chunks, { type: 'audio/webm' }); const formData = new FormData(); formData.append('audio', blob, 'recording.webm');
+                            const response = await fetch('/stt', { method: 'POST', body: formData });
+                            if (!response.ok) throw new Error(await response.text());
+                            const result = await response.json();
+                            if (result.text) { showChat(`🎤 "${result.text}"`, 'user'); doSend(result.text, true); } else { showChat('未识别到语音', 'error'); }
+                        } catch (e) { 
+                            // 超时或网络错误优化提示
+                            let msg = '语音识别失败';
+                            if (e.message.toLowerCase().includes('timeout') || e.message.includes('deadline')) {
+                                msg = '识别超时，请稍后重试 (网络拥堵)';
+                            } else if (e.message.includes('502') || e.message.includes('500')) {
+                                msg = '服务暂时不可用，请稍后重试';
+                            } else {
+                                msg = `语音识别失败: ${e.message}`;
+                            }
+                            showChat(msg, 'error'); 
+                        }
+                        stream.getTracks().forEach(t => t.stop());
+                    };
+                    mediaRecorder.start(); isRecording = true;
+                }).catch(e => showChat('无法访问麦克风', 'error'));
+            }
+            function stopRecordingAndSend() { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); isRecording = false; }
+            setInterval(() => {
+                if (isRecording) { document.getElementById('voice-text').innerText = "松开 发送"; document.getElementById('voice-icon').innerText = "🎙️"; }
+                else { document.getElementById('voice-text').innerText = "按住说话"; document.getElementById('voice-icon').innerText = "🎤"; }
+            }, 200);
+            
+            // SVG 黑板
+            const SVG_NS = "http://www.w3.org/2000/svg";
+            const svgContent = document.getElementById('board-content');
+            let boardVisible = false;
+            const SVGBoard = {
+                clear: () => { svgContent.innerHTML = ''; },
+                drawText: (x, y, text, size, color, align) => { const t = document.createElementNS(SVG_NS, 'text'); t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('font-size', size); t.setAttribute('fill', color); t.setAttribute('text-anchor', align || 'start'); t.textContent = text; svgContent.appendChild(t); },
+                drawLine: (x1, y1, x2, y2, color, width, dashed) => { const l = document.createElementNS(SVG_NS, 'line'); l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2); l.setAttribute('stroke', color); l.setAttribute('stroke-width', width); if (dashed) l.setAttribute('stroke-dasharray', '5,5'); svgContent.appendChild(l); }
+            };
+            function drawSVGAction(action, data) {
+                switch(action) {
+                    case 'write_text': SVGBoard.drawText(data.x, data.y, data.text, 20, data.color || '#fff', 'middle'); break;
+                    case 'draw_line': SVGBoard.drawLine(data.x1, data.y1, data.x2, data.y2, data.color || '#00f2ff', 3, data.dashed); break;
+                    case 'draw_triangle': SVGBoard.drawLine(data.x1, data.y1, data.x2, data.y2, '#fff', 4); SVGBoard.drawLine(data.x2, data.y2, data.x3, data.y3, '#ffd700', 4); SVGBoard.drawLine(data.x3, data.y3, data.x1, data.y1, '#fff', 4); break;
+                    case 'draw_circle': SVGBoard.drawLine(data.x, data.y, data.x + data.r * 2, data.y, '#00f2ff', 3); break;
+                    case 'clear': SVGBoard.clear(); break;
+                }
+            }
+            const board = document.getElementById('blackboard-container');
+            function toggleBoard(show) {
+                boardVisible = show;
+                board.style.opacity = show ? '1' : '0';
+                board.style.pointerEvents = show ? 'auto' : 'none';
+                charTargetPos = show ? { x: -1.5, y: 0.1, z: -0.5 } : { x: 0, y: 0.1, z: 0 };
+                if (show) setState(STATES.TEACHING); else setState(STATES.IDLE);
+                
+                // Reset views when hiding
+                if (!show) {
+                    document.getElementById('blackboard').style.display = 'block';
+                    document.getElementById('blog-list-overlay').style.display = 'none';
+                    currentMode = null;
+                    document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+                }
+            }
+            const toggleBtn = document.getElementById('toggle-board-btn');
+            if (toggleBtn) toggleBtn.onclick = () => toggleBoard(!boardVisible);
+            window.runStoryboard = async (steps) => {
+                for (const step of steps) {
+                    if (step.action === 'speak') { showChat(step.text, 'ai'); await speak(step.text); }
+                    else if (step.action === 'draw') drawSVGAction(step.type, step.data);
+                    else if (step.action === 'clear_board') drawSVGAction('clear');
+                    else if (step.action === 'board') toggleBoard(step.show);
+                    else if (step.action === 'wait') await new Promise(r => setTimeout(r, step.ms));
+                    else if (step.action === 'emotion') updateEmotion(step.value, 0.8);
+                }
+                setState(STATES.IDLE);
+            };
+            
+            // 模式切换功能（支持 toggle 关闭 + 博客演讲）
+            let currentMode = null; // 当前激活的模式
+            
+            window.triggerMode = (mode) => {
+                console.log('切换模式:', mode);
+                
+                // 如果点击的是当前已激活的模式，则关闭
+                if (currentMode === mode) {
+                    currentMode = null;
+                    showChat(mode === 'math' ? '📐 数学辅导模式已关闭' : '📝 博客演讲模式已关闭', 'ai');
+                    toggleBoard(false);
+                    setState(STATES.IDLE);
+                    // 更新按钮高亮
+                    document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+                    return;
+                }
+                
+                // 先清除旧模式
+                document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+                
+                if (mode === 'math') {
+                    currentMode = 'math';
+                    showChat('📐 数学辅导模式已激活', 'ai');
+                    setState(STATES.TEACHING);
+                    toggleBoard(true);
+                    // 高亮对应按钮
+                    document.querySelectorAll('.mode-btn')[0].classList.add('active');
+                    
+                    // 添加数学演示内容并开始讲解
+                    setTimeout(async () => {
+                        drawSVGAction('write_text', { x: 200, y: 40, text: '勾股定理', size: 28, color: '#00f2ff' });
+                        drawSVGAction('draw_triangle', { x1: 150, y1: 80, x2: 150, y2: 200, x3: 250, y3: 200, color: '#ffd700' });
+                        drawSVGAction('write_text', { x: 120, y: 150, text: 'a', size: 20, color: '#fff' });
+                        drawSVGAction('write_text', { x: 200, y: 230, text: 'b', size: 20, color: '#fff' });
+                        drawSVGAction('write_text', { x: 220, y: 140, text: 'c', size: 20, color: '#fff' });
+                        drawSVGAction('write_text', { x: 200, y: 260, text: 'a² + b² = c²', size: 22, color: '#00ff88' });
+                        
+                        // 开始语音讲解
+                        await speak("大家好，这是勾股定理。在直角三角形中，两条直角边的平方和等于斜边的平方，也就是 a 方加 b 方等于 c 方。");
+                    }, 300);
+                } else if (mode === 'blog') {
+                    currentMode = 'blog';
+                    showChat('📝 博客演讲模式已激活，正在加载列表...', 'ai');
+                    setState(STATES.TEACHING); // Use TEACHING to show blackboard
+                    toggleBoard(true);
+                    // 高亮对应按钮
+                    document.querySelectorAll('.mode-btn')[1].classList.add('active');
+                    
+                    // 隐藏 SVG，显示 HTML 列表
+                    document.getElementById('blackboard').style.display = 'none';
+                    document.getElementById('blog-list-overlay').style.display = 'block';
+                    
+                    // 清空旧列表
+                    const listContainer = document.getElementById('blog-list-items');
+                    listContainer.innerHTML = '<div style="color:#888;text-align:center;">加载中...</div>';
+                    
+                    // 获取博客数据
+                    fetch('/api/blogs').then(res => res.json()).then(blogs => {
+                        listContainer.innerHTML = '';
+                        if (!blogs || blogs.length === 0) {
+                            listContainer.innerHTML = '<div style="color:#888;text-align:center;">暂无博客</div>';
+                            return;
+                        }
+                        
+                        blogs.forEach((blog, index) => {
+                            const item = document.createElement('div');
+                            item.className = 'blog-item';
+                            item.innerHTML = `
+                                <div class="blog-title">${index + 1}. ${blog.title}</div>
+                                <div class="blog-date">${blog.date}</div>
+                                <button class="blog-btn" id="read-btn-${index}">🔊 朗读原文</button>
+                            `;
+                            listContainer.appendChild(item);
+                            
+                            // 绑定朗读事件
+                            document.getElementById(`read-btn-${index}`).onclick = (e) => {
+                                e.stopPropagation();
+                                speak(blog.summary);
+                            };
+                        });
+                    }).catch(err => {
+                        listContainer.innerHTML = '<div style="color:red;text-align:center;">加载失败</div>';
+                    });
+                }
+            };
+            
+            // 版本号点击切换日志显示
+            const versionTag = document.getElementById('version-tag');
+            if (versionTag) {
+                versionTag.onclick = () => {
+                    const dbg = document.getElementById('debug-log');
+                    if (dbg.style.display === 'none' || !dbg.style.display) {
+                        dbg.style.display = 'block';
+                        versionTag.style.opacity = '1';
+                    } else {
+                        dbg.style.display = 'none';
+                        versionTag.style.opacity = '0.6';
+                    }
+                };
+            }
+        }
+    </script>
+</body>
+</html>

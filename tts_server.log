@@ -1,0 +1,4 @@
+usage: supertonic [-h]
+                  {say,tts,t,synthesize,s,list-voices,lv,info,i,download,d,version,v}
+                  ...
+supertonic: error: argument command: invalid choice: 'serve' (choose from 'say', 'tts', 't', 'synthesize', 's', 'list-voices', 'lv', 'info', 'i', 'download', 'd', 'version', 'v')

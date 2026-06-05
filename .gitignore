@@ -11,3 +11,11 @@ digital-human
 
 # Node modules
 node_modules/
+
+# Binaries
+backend_bin
+aibot-backend
+ai-svc-new
+services/*/*.exe
+frontend/libs/
+frontend/models/

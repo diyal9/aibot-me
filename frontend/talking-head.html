@@ -7,29 +7,48 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>AI Digital Human - 全能讲师</title>
     <style>
-        :root { --accent: #00f2ff; --bg: #050508; --panel-bg: rgba(255, 255, 255, 0.1); --board-bg: rgba(20, 25, 35, 0.85); }
+        :root { --accent: #0088aa; --bg: #e8edf2; --panel-bg: rgba(0, 0, 0, 0.06); --board-bg: rgba(255, 255, 255, 0.95); }
         * { box-sizing: border-box; }
-        body { margin: 0; padding: 0; background: var(--bg); overflow: hidden; font-family: -apple-system, sans-serif; color: #fff; -webkit-tap-highlight-color: transparent; user-select: none; }
+        body { margin: 0; padding: 0; background: var(--bg); overflow: hidden; font-family: -apple-system, sans-serif; color: #1a1a2e; -webkit-tap-highlight-color: transparent; user-select: none; }
         
         /* 3D Canvas */
         #c { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; cursor: pointer; }
+        
+        /* Background */
+        .bg-glow {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(180deg, #d4d0cb 0%, #e8e4df 40%, #f0ede8 100%);
+            transform: none; z-index: 0; pointer-events: none;
+        }
+        /* Character back-glow (warm tone) */
+        .char-glow {
+            position: absolute; top: 22%; left: 50%; width: 85%; height: 48%;
+            background: radial-gradient(ellipse at center, rgba(200,195,188,0.5) 0%, rgba(220,215,208,0.3) 40%, transparent 70%);
+            transform: translate(-50%, -50%); z-index: 0; pointer-events: none;
+        }
         
         /* UI 层 */
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: flex; flex-direction: column; justify-content: space-between; }
         
         /* 顶部信息 */
         .header-bar { display: flex; justify-content: space-between; padding-top: max(20px, env(safe-area-inset-top, 20px)); padding-left: 20px; padding-right: 20px; padding-bottom: 20px; }
-        .head { font-size: 14px; font-weight: 700; letter-spacing: 2px; color: rgba(255,255,255,0.8); text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+        .head { font-size: 14px; font-weight: 700; letter-spacing: 2px; color: rgba(30,30,60,0.85); text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
         .head span { color: var(--accent); }
 
         /* 状态指示器 */
-        #status-pill { padding: 6px 12px; border-radius: 12px; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); font-size: 12px; color: #888; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; gap: 6px; transition: all 0.3s ease; }
+        #status-pill { padding: 6px 12px; border-radius: 12px; background: rgba(255,255,255,0.85); backdrop-filter: blur(5px); font-size: 12px; color: #666; border: 1px solid rgba(0,0,0,0.08); display: flex; align-items: center; gap: 6px; transition: all 0.3s ease; position: relative; }
+        #status-pill::after {
+            content: ''; position: absolute; inset: -2px; border-radius: 14px;
+            background: transparent; transition: box-shadow 0.6s;
+        }
+        #status-pill.listening::after { box-shadow: 0 0 12px rgba(0,136,170,0.3); animation: breathe 2s ease-in-out infinite; }
         #status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: #444; transition: background 0.3s; }
-        #status-pill.listening .dot { background: #00f2ff; box-shadow: 0 0 8px var(--accent); animation: pulse-blue 1.5s infinite; }
+        #status-pill.listening .dot { background: #0088aa; box-shadow: 0 0 6px var(--accent); animation: pulse-blue 1.5s infinite; }
         #status-pill.thinking .dot { background: #facc15; box-shadow: 0 0 8px #facc15; animation: pulse-yellow 1s infinite; }
         #status-pill.speaking .dot { background: #ff4444; box-shadow: 0 0 8px #ff4444; animation: pulse-red 1s infinite; }
-        #status-pill.greeting .dot { background: #00ff88; box-shadow: 0 0 8px #00ff88; }
+        #status-pill.greeting .dot { background: #00cc66; box-shadow: 0 0 8px #00cc66; }
         #status-pill.error .dot { background: #ff0000; box-shadow: 0 0 8px #ff0000; }
+        @keyframes breathe { 0%,100% { box-shadow: 0 0 6px rgba(0,136,170,0.15); } 50% { box-shadow: 0 0 16px rgba(0,136,170,0.4); } }
         
         /* 情绪指示器 */
         #emotion-indicator { font-size: 16px; margin-right: 6px; animation: emotion-bounce 2s ease-in-out infinite; }
@@ -41,28 +60,33 @@
         /* SVG 动态黑板 */
         #blackboard-container {
             position: absolute; top: 15%; left: 50%; transform: translateX(-50%);
-            width: 85%; max-width: 550px; height: 55%;
+            width: 90%; max-width: 700px; height: 55%;
             background: var(--board-bg);
-            border: 1px solid rgba(255,255,255,0.2); border-radius: 12px;
+            border: 1px solid rgba(0,0,0,0.12); border-radius: 12px;
             backdrop-filter: blur(10px);
             opacity: 0; transform: translateX(-50%) scale(0.9);
             transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-            pointer-events: auto; z-index: 15; overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            pointer-events: none; /* 默认不阻挡点击 */
+            z-index: 15; overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.12);
         }
-        #blackboard-container.show { opacity: 1; transform: translateX(-50%) scale(1); }
+        #blackboard-container.show { opacity: 1; transform: translateX(-50%) scale(1); pointer-events: auto; }
         #blackboard { width: 100%; height: 100%; }
         .blog-item { 
-            background: rgba(255,255,255,0.05); margin-bottom:10px; padding:10px; border-radius:8px; 
-            border: 1px solid rgba(255,255,255,0.1); cursor:pointer; transition:all 0.2s;
+            background: rgba(0,0,0,0.03); margin-bottom:10px; padding:10px; border-radius:8px; 
+            border: 1px solid rgba(0,0,0,0.08); cursor:pointer; transition:all 0.2s;
         }
-        .blog-item:hover { background: rgba(0,242,255,0.1); border-color: var(--accent); }
-        .blog-title { color: #fff; font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+        .blog-item:hover { background: rgba(0,136,170,0.08); border-color: var(--accent); }
+        .blog-item.active { background: rgba(0,136,170,0.12) !important; border-color: var(--accent) !important; box-shadow: 0 0 8px rgba(0,136,170,0.2); }
+        .blog-title { color: #1a1a2e; font-size: 14px; font-weight: bold; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
         .blog-date { color: #888; font-size: 10px; margin-bottom: 4px; }
         .blog-btn { 
-            background: var(--accent); color: #000; border:none; padding:4px 10px; border-radius:4px; 
-            font-size:12px; font-weight:bold; margin-top:5px; cursor:pointer; 
+            background: transparent; border: none; padding: 4px; 
+            font-size: 18px; cursor: pointer; flex-shrink: 0;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); opacity: 0.5;
         }
+        .blog-btn:hover { transform: scale(1.2); opacity: 1; }
+        .blog-btn:active { transform: scale(0.9); }
         
         /* 模式切换按钮 */
         .mode-switcher {
@@ -73,34 +97,38 @@
         .mode-switcher:hover { opacity: 1; }
         .mode-btn {
             width: 44px; height: 44px; border-radius: 12px;
-            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
-            color: #fff; font-size: 20px; display: flex; align-items: center; justify-content: center;
-            cursor: pointer; backdrop-filter: blur(5px); transition: all 0.2s;
+            background: rgba(255,255,255,0.8); border: 1px solid rgba(0,0,0,0.08);
+            color: #1a1a2e; font-size: 20px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; backdrop-filter: blur(5px); transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
         }
-        .mode-btn:hover { background: var(--accent); color: #000; transform: scale(1.1); }
+        .mode-btn:hover { background: var(--accent); color: #000; transform: scale(1.15); box-shadow: 0 4px 16px rgba(0,136,170,0.25); }
         .mode-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
 
         /* 聊天气泡 */
         #chat-bubble {
-            position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%);
+            position: absolute; bottom: 150px; left: 50%; transform: translateX(-50%);
             width: 85%; max-width: 300px; text-align: center;
-            background: rgba(0,0,0,0.65); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 18px; padding: 12px 20px; color: #eee; font-size: 15px; line-height: 1.5;
-            opacity: 0; transform: translateX(-50%) translateY(20px); transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: auto;
+            background: #ffffff; border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 18px; padding: 12px 20px; color: #1a1a2e; font-size: 15px; line-height: 1.6;
+            letter-spacing: 0.02em;
+            opacity: 0; transform: translateX(-50%) translateY(20px); transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: none;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            border-left: 3px solid var(--accent);
         }
-        #chat-bubble.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-        #chat-bubble.user { background: rgba(0,242,255,0.15); border-color: rgba(0,242,255,0.3); color: var(--accent); }
-        #chat-bubble.ai { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
-        #chat-bubble.error { background: rgba(255,68,68,0.2); border-color: rgba(255,68,68,0.3); color: #ffaaaa; }
+        #chat-bubble.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+        #chat-bubble.user { background: rgba(0,136,170,0.05); border-color: rgba(0,136,170,0.2); color: #006680; border-left-color: var(--accent); }
+        #chat-bubble.ai { background: #ffffff; border-color: rgba(0,0,0,0.08); }
+        #chat-bubble.error { background: rgba(255,68,68,0.05); border-color: rgba(255,68,68,0.15); color: #cc3333; border-left-color: #ff4444; }
 
         /* 底部输入区域 */
-        .input-area { padding: 15px 20px 25px; background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%); pointer-events: auto; z-index: 20; }
-        .pill-container { display: flex; align-items: center; background: var(--panel-bg); border: 1px solid rgba(255,255,255,0.15); border-radius: 24px; height: 48px; width: 100%; max-width: 360px; margin: 0 auto; overflow: hidden; transition: all 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
-        .pill-btn { height: 100%; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: #fff; font-size: 20px; cursor: pointer; }
-        .pill-btn:active { background: rgba(255,255,255,0.15); }
-        .voice-main-area { flex: 1; height: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; color: #fff; font-size: 15px; font-weight: 500; cursor: pointer; background: transparent; border: none; transition: background 0.3s; }
+        .input-area { padding: 15px 20px 25px; background: linear-gradient(to top, rgba(255,255,255,0.98) 0%, rgba(232,237,242,0.6) 60%, transparent 100%); pointer-events: auto; z-index: 20; }
+        .pill-container { display: flex; align-items: center; background: #ffffff; border: 1px solid rgba(0,0,0,0.1); border-radius: 24px; height: 48px; width: 100%; max-width: 360px; margin: 0 auto; overflow: hidden; transition: all 0.3s; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+        .pill-btn { height: 100%; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: #1a1a2e; font-size: 20px; cursor: pointer; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .pill-btn:active { background: rgba(0,0,0,0.06); transform: scale(0.92); }
+        .voice-main-area { flex: 1; height: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; color: #1a1a2e; font-size: 15px; font-weight: 500; cursor: pointer; background: transparent; border: none; transition: background 0.3s; letter-spacing: 0.03em; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
         .voice-main-area.recording { color: #ff4444; animation: pulse-red 1.5s infinite; background: rgba(255,68,68,0.15); }
-        .voice-main-area.speaking-active { color: var(--accent); animation: pulse-blue 1.5s infinite; background: rgba(0,242,255,0.15); }
+        .voice-main-area.speaking-active { color: var(--accent); animation: pulse-blue 1.5s infinite; background: rgba(0,136,170,0.1); }
         
         .input-mode-content { display: none; flex: 1; height: 100%; align-items: center; padding: 0 4px; }
         .pill-container.is-typing .voice-main-area { display: none; }
@@ -108,20 +136,67 @@
         .pill-container.is-typing .input-mode-content { display: flex; }
         .pill-container.is-typing .voice-switch-btn { display: flex; }
         .pill-container.is-typing .send-btn { display: flex; }
-        input { flex: 1; height: 100%; background: transparent; border: none; color: #fff; font-size: 16px; outline: none; padding: 0 8px; }
+        input { flex: 1; height: 100%; background: transparent; border: none; color: #1a1a2e; font-size: 16px; outline: none; padding: 0 8px; }
         .voice-switch-btn { display: none; color: #888; }
         .send-btn { display: none; color: var(--accent); font-size: 22px; }
 
         @keyframes spin { 100% { transform: rotate(360deg); } }
         #loader { position: absolute; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
-        .spinner { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
-        #loader-text { margin-top: 15px; font-size: 12px; color: #666; }
-        #start-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.85); z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .start-btn { padding: 15px 40px; background: var(--accent); color: #000; font-size: 18px; font-weight: bold; border-radius: 30px; border: none; box-shadow: 0 0 20px var(--accent); }
-        #error-msg { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ff4444; text-align: center; background: #111; padding: 20px; border-radius: 10px; z-index: 300; }
+        #progress-track { width: 200px; height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; margin-top: 15px; overflow: hidden; }
+        #progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.2s; }
+        .spinner { width: 40px; height: 40px; border: 3px solid rgba(0,0,0,0.08); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        #loader-text { margin-top: 15px; font-size: 12px; color: #888; }
+        #start-overlay {
+            position: absolute; inset: 0;
+            background: radial-gradient(ellipse at 50% 60%, rgba(232,228,223,0.7) 0%, rgba(228,224,218,0.85) 100%);
+            backdrop-filter: blur(4px);
+            z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .start-btn {
+            padding: 16px 40px;
+            background: linear-gradient(135deg, #0088aa 0%, #006680 100%);
+            color: #fff; font-size: 16px; font-weight: 600;
+            border-radius: 28px; border: none;
+            letter-spacing: 0.05em;
+            box-shadow: 0 4px 20px rgba(0,136,170,0.35), 0 2px 6px rgba(0,0,0,0.1);
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            cursor: pointer;
+            position: relative; overflow: hidden;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .start-btn::after {
+            content: ''; position: absolute; inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 50%);
+            border-radius: inherit;
+        }
+        .btn-wave {
+            font-size: 22px;
+            display: inline-block;
+            animation: float-bounce 2s ease-in-out infinite;
+        }
+        @keyframes float-bounce {
+            0%,100% { transform: translateY(0) rotate(0deg); }
+            30% { transform: translateY(3px) rotate(5deg); }
+            60% { transform: translateY(-1px) rotate(0deg); }
+        }
+        .start-btn:hover {
+            transform: translateY(-2px) scale(1.04);
+            box-shadow: 0 8px 30px rgba(0,136,170,0.45), 0 4px 10px rgba(0,0,0,0.15);
+        }
+        .start-btn:active {
+            transform: translateY(0) scale(0.97);
+            box-shadow: 0 2px 8px rgba(0,136,170,0.3);
+        }
+        .start-subtitle {
+            margin-top: 12px; font-size: 12px; color: rgba(0,0,0,0.35);
+            letter-spacing: 0.03em;
+        }
+        #error-msg { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ff4444; text-align: center; background: #fff; padding: 20px; border-radius: 10px; z-index: 300; border: 1px solid rgba(255,68,68,0.2); box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
     </style>
 </head>
 <body>
+    <div class="bg-glow"></div>
+    <div class="char-glow"></div>
     <div id="c"></div>
     
     <!-- SVG 动态黑板 -->
@@ -138,8 +213,33 @@
         </svg>
         <!-- 博客列表层 (HTML overlay) -->
         <div id="blog-list-overlay" style="display:none; width:100%; height:100%; padding:20px; overflow-y:auto; box-sizing:border-box;">
-            <div style="color:#00f2ff; font-size:18px; font-weight:bold; margin-bottom:15px; text-align:center;">📝 最新博客</div>
+            <div style="color:#0088aa; font-size:18px; font-weight:bold; margin-bottom:15px; text-align:center;">📝 最新博客</div>
             <div id="blog-list-items"></div>
+        </div>
+        <!-- 数学题库列表层 -->
+        <div id="math-overlay" style="display:none; width:100%; height:100%; padding:15px; overflow-y:auto; box-sizing:border-box; background:rgba(255,255,255,0.95);">
+            <!-- 阶段1: 日期选择 -->
+            <div id="math-day-list" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(100px, 1fr)); gap:10px; padding-bottom:20px;">
+                <!-- 由 JS 生成 7 个日期按钮 -->
+            </div>
+            <!-- 阶段2: 题目列表 -->
+            <div id="math-question-list" style="display:none;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #ddd;">
+                    <button onclick="mathBackToDays()" style="background:none; border:none; color:#0088aa; cursor:pointer; font-size:14px;">← 返回日期</button>
+                    <span id="math-current-day-title" style="font-weight:bold; color:#666;"></span>
+                </div>
+                <div style="display:flex; gap:6px; margin-bottom:12px; font-size:11px;">
+                    <span style="background:rgba(0,136,170,0.1); color:#0088aa; padding:2px 8px; border-radius:4px;">基础 ×3</span>
+                    <span style="background:rgba(255,165,0,0.1); color:#ffa500; padding:2px 8px; border-radius:4px;">奥数 ×1</span>
+                    <span style="background:rgba(0,204,102,0.1); color:#00cc66; padding:2px 8px; border-radius:4px;">思维 ×1</span>
+                </div>
+                <div id="math-question-items"></div>
+            </div>
+        </div>
+        <!-- 数学讲解按钮容器 -->
+        <div id="math-controls" style="display:none; position:absolute; bottom:0; left:0; width:100%; padding:15px; background:linear-gradient(to top, rgba(232,237,242,0.95), transparent); text-align:center;">
+            <button id="btn-math-explain" onclick="startMathExplanation()" style="padding:12px 30px; background:#0088aa; color:#fff; border:none; border-radius:8px; font-size:16px; font-weight:bold; cursor:pointer; box-shadow:0 4px 12px rgba(0,136,170,0.3);">🔊 点击开始讲解</button>
+            <button onclick="mathBackToList()" style="padding:10px 20px; background:rgba(255,255,255,0.8); color:#666; border:1px solid rgba(0,0,0,0.1); border-radius:8px; font-size:14px; cursor:pointer; margin-left:10px;">返回题目</button>
         </div>
     </div>
 
@@ -151,7 +251,7 @@
 
     <div id="ui-layer">
         <div class="header-bar">
-            <div class="head"><span>AI</span> TEACHER <span id="version-tag" style="cursor:pointer; opacity:0.6; font-size:11px; font-weight:400; margin-left:8px;">v0.4.23</span></div>
+            <div class="head"><span>AI</span> TEACHER <span id="version-tag" style="cursor:pointer; opacity:0.6; font-size:11px; font-weight:400; margin-left:8px;">v0.4.82</span></div>
             <div id="status-pill"><span id="emotion-indicator">😊</span><div class="dot"></div><span id="status-text">IDLE</span></div>
         </div>
         
@@ -159,7 +259,7 @@
         
         <div class="input-area">
             <div class="pill-container" id="pill">
-                <button class="voice-main-area" id="voice-zone"><span id="voice-icon">🎤</span><span id="voice-text">按住说话</span></button>
+                <button class="voice-main-area" id="voice-zone"><span id="voice-icon">🎙️</span><span id="voice-text">授权麦克风</span></button>
                 <button class="pill-btn switch-btn" id="switch-to-text">⌨️</button>
                 <button class="pill-btn voice-switch-btn" id="switch-to-voice">🎤</button>
                 <div class="input-mode-content"><input id="inp" type="text" placeholder="输入消息..." autocomplete="off"></div>
@@ -168,17 +268,62 @@
         </div>
     </div>
 
-    <div id="loader"><div class="spinner"></div><div id="loader-text">初始化模型...</div></div>
-    <div id="start-overlay" style="display:none;"><div style="font-size: 40px; margin-bottom: 20px;">👋</div><div class="start-btn" id="start-btn">点击开始互动</div></div>
-    <div id="debug-log" style="position:fixed; bottom:10px; left:10px; color:red; font-size:10px; z-index:9999; background:rgba(0,0,0,0.7); padding:5px; display:none;"></div>
+    <div id="loader">
+        <div class="spinner"></div>
+        <div id="loader-text">初始化模型...</div>
+        <div id="progress-track">
+            <div id="progress-fill" style="width: 0%"></div>
+        </div>
+    </div>
+    <div id="start-overlay" style="display:none;">
+        <div class="start-btn" id="start-btn"><span class="btn-wave">👆</span> 点击开始互动</div>
+        <div class="start-subtitle">AI 讲师已就绪</div>
+    </div>
+    <div id="debug-log" style="position:fixed; bottom:10px; left:10px; color:red; font-size:12px; z-index:9999; background:rgba(0,0,0,0.7); padding:5px; display:block; border-radius:4px; max-height:40vh; overflow-y:auto;"></div>
+    
+    <!-- Pose Debug Panel -->
+    <div id="pose-debug" style="position:fixed; top:50%; left:10px; transform:translateY(-50%); z-index:9998; background:rgba(20,20,40,0.92); color:#eee; padding:12px; border-radius:10px; font-size:11px; font-family:monospace; display:none; max-height:90vh; overflow-y:auto; min-width:320px; box-shadow:0 4px 20px rgba(0,0,0,0.5);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <strong style="font-size:13px; color:#00f2ff;">🦴 骨骼调试面板</strong>
+            <button id="pose-debug-close" style="background:none; border:none; color:#888; font-size:16px; cursor:pointer;">✕</button>
+        </div>
+        <!-- 状态选择器 -->
+        <div style="margin-bottom:12px; display:flex; gap:6px; align-items:center;">
+            <span style="color:#aaa; font-size:10px; white-space:nowrap;">调整状态:</span>
+            <select id="pose-state-select" style="flex:1; background:#1a1a2e; color:#00f2ff; border:1px solid #333; padding:4px 8px; border-radius:4px; font-size:11px; font-family:monospace; cursor:pointer;">
+                <option value="idle">🧍 Idle 待机</option>
+                <option value="speaking">🗣️ Speaking 演讲</option>
+                <option value="teaching">📐 Teaching 教学</option>
+                <option value="thinking">🤔 Thinking 思考</option>
+                <option value="greeting">👋 Greeting 问候</option>
+            </select>
+        </div>
+        <div id="pose-sliders"></div>
+        <div style="margin-top:12px; border-top:1px solid #333; padding-top:10px;">
+            <button id="pose-copy-btn" style="background:#0088aa; color:#fff; border:none; padding:6px 14px; border-radius:6px; cursor:pointer; font-size:11px; width:100%; margin-bottom:6px;">📋 复制当前状态参数</button>
+            <button id="pose-copy-all-btn" style="background:#6366f1; color:#fff; border:none; padding:6px 14px; border-radius:6px; cursor:pointer; font-size:11px; width:100%; margin-bottom:6px;">📋 复制全部状态 (JSON)</button>
+            <div id="pose-copy-msg" style="color:#4ade80; text-align:center; margin-top:4px; font-size:10px;"></div>
+        </div>
+    </div>
     <script>
-        // Pre-module check (hidden by default, shown via version tag click)
+            // Pre-module check (hidden by default, shown via version tag click)
         const dbg = document.getElementById('debug-log');
         dbg.style.display = 'none'; // 默认隐藏
         dbg.innerHTML += 'Browser check: ';
         if (typeof window.onerror !== 'undefined') dbg.innerHTML += 'OK. ';
         if (HTMLScriptElement.supports && HTMLScriptElement.supports('module')) dbg.innerHTML += 'Module supported. ';
         else dbg.innerHTML += 'Module NOT supported. ';
+        
+        // 骨骼调试面板快捷键：Ctrl+Shift+D
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                e.preventDefault();
+                const panel = document.getElementById('pose-debug');
+                if (panel) {
+                    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+                }
+            }
+        });
     </script>
     <div id="error-msg"><div id="error-content"></div></div>
 
@@ -190,7 +335,7 @@
         (async () => {
             const dbg = document.getElementById('debug-log');
             dbg.innerHTML += 'Attempting Dynamic Imports...<br>';
-            const cacheBuster = '?v=0.4.28';
+const cacheBuster = '?v=0.4.72';
             try {
                 const THREE = await import('https://47.107.172.201:8089/libs/three.esm.js' + cacheBuster);
                 dbg.innerHTML += 'Three Loaded.<br>';
@@ -234,13 +379,52 @@
             let emotionState = { current: EMOTIONS.CALM, intensity: 0.5, values: { happy: 0.6, calm: 0.3, excited: 0.1, surprised: 0, sad: 0, angry: 0 }, history: [], mood: 0.5, energy: 0.7, lastChange: Date.now() };
             const EMOTION_TRIGGERS = { happy: ['哈哈', '笑', '开心', '棒', '好', '喜欢', '爱', '赞', '谢谢', '感谢', '👍', '❤️', '😄', '嘻嘻', '好玩', '有趣'], surprised: ['哇', '天哪', '什么', '真的吗', '竟然', '居然', '不会吧', '😮', '！？', '！'], sad: ['难过', '伤心', '哭', '累', '烦', '烦死', '糟糕', '讨厌', '恨', '😢', '😭', '哎', '叹气', '无聊', '孤独', '寂寞'], angry: ['生气', '愤怒', '滚', '笨蛋', '垃圾', '有病', '傻', '蠢', '烦人', '讨厌', '😡', '💢', '气死', '闭嘴'], excited: ['太', '超', '非常', '极了', '疯狂', '爆炸', '燃', '冲冲冲', '🔥', '💥', '激动'] };
             const EMOTION_EXPRESSIONS = { [EMOTIONS.HAPPY]: { happy: 0.6, angry: 0, sad: 0, surprise: 0, relaxed: 0.3 }, [EMOTIONS.EXCITED]: { happy: 0.8, angry: 0, sad: 0, surprise: 0.4, relaxed: 0 }, [EMOTIONS.CALM]: { happy: 0, angry: 0, sad: 0, surprise: 0, relaxed: 0.5 }, [EMOTIONS.SURPRISED]: { happy: 0, angry: 0, sad: 0, surprise: 0.8, relaxed: 0 }, [EMOTIONS.SAD]: { happy: 0, angry: 0, sad: 0.7, surprise: 0, relaxed: 0 }, [EMOTIONS.ANGRY]: { happy: 0, angry: 0.8, sad: 0.1, surprise: 0, relaxed: 0 }, [EMOTIONS.FOCUS]: { happy: 0.1, angry: 0, sad: 0, surprise: 0.2, relaxed: 0.2 } };
-            const EMOTION_BODY_LANG = { [EMOTIONS.HAPPY]: { headTilt: 0.1, headBounce: 0.03, armSpread: 0.1, bounceFreq: 1.5 }, [EMOTIONS.EXCITED]: { headTilt: 0.15, headBounce: 0.06, armSpread: 0.2, bounceFreq: 2.5 }, [EMOTIONS.CALM]: { headTilt: 0, headBounce: 0.01, armSpread: 0, bounceFreq: 0.8 }, [EMOTIONS.SURPRISED]: { headTilt: -0.05, headBounce: 0, armSpread: 0.15, bounceFreq: 0 }, [EMOTIONS.SAD]: { headTilt: -0.15, headBounce: 0, armSpread: -0.05, bounceFreq: 0 }, [EMOTIONS.ANGRY]: { headTilt: 0, headBounce: 0.04, armSpread: 0.1, bounceFreq: 3.0 }, [EMOTIONS.FOCUS]: { headTilt: -0.1, headBounce: 0, armSpread: -0.1, bounceFreq: 0.5 } };
+            const EMOTION_BODY_LANG = { [EMOTIONS.HAPPY]: { headTilt: 0.1, headBounce: 0.03, armSpread: 0.1, bounceFreq: 1.5 }, [EMOTIONS.EXCITED]: { headTilt: 0.15, headBounce: 0.06, armSpread: 0.2, bounceFreq: 2.5 }, [EMOTIONS.CALM]: { headTilt: 0, headBounce: 0.001, armSpread: 0, bounceFreq: 0.8 }, [EMOTIONS.SURPRISED]: { headTilt: -0.05, headBounce: 0, armSpread: 0.15, bounceFreq: 0 }, [EMOTIONS.SAD]: { headTilt: -0.15, headBounce: 0, armSpread: -0.05, bounceFreq: 0 }, [EMOTIONS.ANGRY]: { headTilt: 0, headBounce: 0.04, armSpread: 0.1, bounceFreq: 3.0 }, [EMOTIONS.FOCUS]: { headTilt: -0.1, headBounce: 0, armSpread: -0.1, bounceFreq: 0.5 } };
             function detectEmotion(text) { if (!text) return null; let scores = { happy: 0, surprised: 0, sad: 0, angry: 0, excited: 0 }; for (const [emotion, keywords] of Object.entries(EMOTION_TRIGGERS)) { for (const kw of keywords) { if (text.includes(kw)) { scores[emotion] += 1; if (kw.includes('！') || kw.includes('？')) scores[emotion] *= 1.5; } } } scores.happy *= PERSONALITY.traits.optimistic; scores.sad *= PERSONALITY.traits.sensitive; scores.surprised *= PERSONALITY.traits.curious; const maxScore = Math.max(...Object.values(scores)); if (maxScore < 1) return null; return Object.entries(scores).find(([_, v]) => v === maxScore)?.[0] || null; }
             function updateEmotion(newEmotion, intensity = 0.6) { if (!newEmotion) return; emotionState.current = newEmotion; emotionState.intensity = Math.min(1, intensity * PERSONALITY.traits.sensitive); emotionState.lastChange = Date.now(); emotionState.history.push({ emotion: newEmotion, time: Date.now(), intensity: emotionState.intensity }); if (['happy', 'excited', 'calm'].includes(newEmotion)) { emotionState.mood = Math.min(1, emotionState.mood + 0.1 * emotionState.intensity); emotionState.energy = Math.min(1, emotionState.energy + 0.05); } else { emotionState.mood = Math.max(0, emotionState.mood - 0.15 * emotionState.intensity); emotionState.energy = Math.max(0.3, emotionState.energy - 0.1); } }
             function decayEmotions(delta) { const decayRate = 0.15; for (const key of Object.keys(emotionState.values)) { const baseline = PERSONALITY.baseline[key] || 0; emotionState.values[key] = THREE.MathUtils.lerp(emotionState.values[key], baseline, decayRate * delta); } const elapsed = (Date.now() - emotionState.lastChange) / 1000; if (elapsed > 3) { emotionState.intensity = Math.max(0, emotionState.intensity - 0.05 * delta); if (emotionState.intensity < 0.1) { emotionState.current = emotionState.mood > 0.4 ? EMOTIONS.CALM : EMOTIONS.SAD; emotionState.intensity = 0.3; } } emotionState.energy = THREE.MathUtils.lerp(emotionState.energy, 0.7, 0.02 * delta); }
             function applyEmotionToAvatar() { if (!vrm) return; const expr = EMOTION_EXPRESSIONS[emotionState.current]; if (!expr) return; const intensity = emotionState.intensity; for (const [key, value] of Object.entries(expr)) { vrm.expressionManager.setValue(key, value * intensity); } }
 
-            // === 状态机 ===
+            // Markdown 清理函数：提取纯文本
+            function stripMarkdown(md) {
+                if (!md) return '';
+                let text = md;
+                // 代码块
+                text = text.replace(/```[\s\S]*?```/g, '');
+                // 行内代码
+                text = text.replace(/`([^`]+)`/g, '$1');
+                // 图片 ![alt](url)
+                text = text.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
+                // 链接 [text](url)
+                text = text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+                // 粗体/斜体 **text** / *text* / ~~text~~
+                text = text.replace(/\*\*([^*]+)\*\*/g, '$1');
+                text = text.replace(/\*([^*]+)\*/g, '$1');
+                text = text.replace(/~~([^~]+)~~/g, '$1');
+                // 标题 # text
+                text = text.replace(/^#{1,6}\s+/gm, '');
+                // 列表项前缀
+                text = text.replace(/^[\s]*[-*+]\s+/gm, '');
+                text = text.replace(/^[\s]*\d+\.\s+/gm, '');
+                // 引用 >
+                text = text.replace(/^>\s+/gm, '');
+                // 水平线
+                text = text.replace(/^[-*_]{3,}$/gm, '');
+                // HTML 标签
+                text = text.replace(/<[^>]+>/g, '');
+                // 多余空行
+                text = text.replace(/\n{2,}/g, '\n').trim();
+                return text;
+            }
+            
+            // 过滤表情符号（TTS 专用）
+            function stripEmojis(text) {
+                if (!text) return '';
+                // 移除 Unicode 表情符号范围
+                return text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{200D}\u{20E3}\u{231A}-\u{231B}\u{23E9}-\u{23F3}\u{23F8}-\u{23FA}\u{25AA}-\u{25AB}\u{25B6}\u{25C0}\u{25FB}-\u{25FE}]/gu, '');
+            }
+            
+            // 状态机 ===
             const STATES = { IDLE: 'idle', LISTENING: 'listening', THINKING: 'thinking', SPEAKING: 'speaking', GREETING: 'greeting', TEACHING: 'teaching' };
             let currentState = STATES.IDLE;
             const statusPill = document.getElementById('status-pill'); const statusText = document.getElementById('status-text'); const voiceZone = document.getElementById('voice-zone');
@@ -251,16 +435,47 @@
             function setState(newState) { if (currentState === newState) return; currentState = newState; statusPill.className = newState === STATES.IDLE ? '' : newState; statusText.textContent = newState.toUpperCase(); if (newState === STATES.SPEAKING || newState === STATES.TEACHING) { voiceZone.classList.add('speaking-active'); } else { voiceZone.classList.remove('speaking-active'); } }
 
             // === 3D 场景 ===
-            const scene = new THREE.Scene(); scene.background = new THREE.Color(0x050508);
-            const camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.1, 100); camera.position.set(0, 1.2, 3.5);
-            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-            renderer.setSize(window.innerWidth, window.innerHeight); renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
+            const scene = new THREE.Scene(); scene.background = null;
+            const camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.1, 100); camera.position.set(0, 1.1, 3.5);
+            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); // 开启抗锯齿，人物边缘清晰
+            renderer.setSize(window.innerWidth, window.innerHeight); renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // 1.5x，画质和性能平衡
             renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.outputColorSpace = THREE.SRGBColorSpace;
             document.getElementById('c').appendChild(renderer.domElement);
 
-            scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.6));
-            const dirLight = new THREE.DirectionalLight(0xffffff, 1.2); dirLight.position.set(1, 2, 2); scene.add(dirLight);
-            scene.add(new THREE.DirectionalLight(0xffffff, 0.4).translateX(-2).translateZ(-2));
+            // Lighting: 精简光源（从5个减到3个，减少GPU光照计算）
+            const ambLight = new THREE.AmbientLight(0xe0d8d0, 0.6); scene.add(ambLight);
+            const dirLight = new THREE.DirectionalLight(0xfff5e8, 1.0); dirLight.position.set(1, 2, 2); scene.add(dirLight);
+            // 移除 hemisphereLight 和第二个 directionalLight，性能优化
+            
+            // Ground shadow（禁用实时阴影，用静态半透明面片替代，减少每帧阴影计算）
+            const shadowGeo = new THREE.PlaneGeometry(4, 4);
+            const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.15, depthWrite: false });
+            const shadowPlane = new THREE.Mesh(shadowGeo, shadowMat);
+            shadowPlane.rotation.x = -Math.PI / 2; shadowPlane.position.y = 0;
+            scene.add(shadowPlane);
+            // dirLight.castShadow = true; // 已禁用，性能优化
+            
+            // Subtle floor: warm color wash
+            const floorGeo = new THREE.PlaneGeometry(20, 20);
+            const floorMat = new THREE.MeshBasicMaterial({ color: 0xd8d0c5, transparent: true, opacity: 0.12, depthWrite: false });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2; floor.position.y = 0;
+            scene.add(floor);
+            
+            // Grid floor for 3D depth (warm tones) - 减少分段数
+            const gridHelper = new THREE.GridHelper(12, 16, 0xc5bfb5, 0xd0c8bc);
+            gridHelper.position.y = 0.002;
+            gridHelper.material.transparent = true;
+            gridHelper.material.opacity = 0.25;
+            gridHelper.material.depthWrite = false;
+            scene.add(gridHelper);
+            
+            // Spotlight disk under character
+            const spotGeo = new THREE.CircleGeometry(1.2, 32);
+            const spotMat = new THREE.MeshBasicMaterial({ color: 0xe8e0d5, transparent: true, opacity: 0.25, depthWrite: false });
+            const spotDisk = new THREE.Mesh(spotGeo, spotMat);
+            spotDisk.rotation.x = -Math.PI / 2; spotDisk.position.set(0, 0.005, -1.5);
+            scene.add(spotDisk);
 
             const loader = new GLTFLoader(); loader.register(p => new VRMLoaderPlugin(p));
             let vrm = null, clock = new THREE.Clock();
@@ -268,70 +483,71 @@
             let mouseX = 0, mouseY = 0;
             window.addEventListener('mousemove', (e) => { mouseX = (e.clientX / window.innerWidth) * 2 - 1; mouseY = -(e.clientY / window.innerHeight) * 2 + 1; });
             let greetingAnim = { active: false, t: 0 };
-            let charTargetPos = { x: 0, y: 0.1, z: 0 };
+            let charTargetPos = { x: 0, y: 0, z: -1.5 };
 
             async function loadVRMBuffer() {
                 dbg.innerHTML += 'Loading VRM...<br>';
-                return new Promise((resolve, reject) => {
-                    const req = indexedDB.open('vrm-cache', 1);
-                    req.onupgradeneeded = (e) => e.target.result.createObjectStore('vrm');
-                    req.onsuccess = (e) => {
-                        const db = e.target.result; const tx = db.transaction('vrm', 'readonly'); const store = tx.objectStore('vrm');
-                        const getReq = store.get(CACHE_KEY);
-                        getReq.onsuccess = () => { 
-                            if (getReq.result) { dbg.innerHTML += 'VRM from cache.<br>'; resolve(getReq.result); } 
-                            else { 
-                                dbg.innerHTML += 'Fetching VRM (15MB, please wait)...<br>';
-                                document.getElementById('loader-text').innerText = '下载模型中 (约15MB)...'; 
-                                
-                                // Fetch with timeout and retry
-                                const fetchWithTimeout = (url, timeout = 120000) => {
-                                    return Promise.race([
-                                        fetch(url, { 
-                                            headers: { 'Accept': 'model/vrm, application/octet-stream, */*' },
-                                            cache: 'force-cache'
-                                        }),
-                                        new Promise((_, rej) => setTimeout(() => rej(new Error('Download timeout (120s)')), timeout))
-                                    ]);
-                                };
-                                
-                                fetchWithTimeout(MODEL_URL).then(res => {
-                                    if (!res.ok) throw new Error(`HTTP ${res.status} - ${res.statusText}`);
-                                    const contentLength = res.headers.get('content-length');
-                                    const total = contentLength ? parseInt(contentLength) : 0;
-                                    let loaded = 0;
-                                    
-                                    // For large files, read as stream to show progress
-                                    if (total > 5000000) { // >5MB
-                                        const reader = res.body.getReader();
-                                        const chunks = [];
-                                        const readStream = () => reader.read().then(({ done, value }) => {
-                                            if (done) {
-                                                const buf = new Uint8Array(loaded);
-                                                let offset = 0;
-                                                for (const chunk of chunks) {
-                                                    buf.set(chunk, offset);
-                                                    offset += chunk.length;
-                                                }
-                                                return buf.buffer;
-                                            }
-                                            chunks.push(value);
-                                            loaded += value.length;
-                                            const pct = total ? Math.round((loaded / total) * 100) : '?';
-                                            document.getElementById('loader-text').innerText = `下载中... ${pct}%`;
-                                            return readStream();
-                                        });
-                                        return readStream();
-                                    }
-                                    return res.arrayBuffer();
-                                }).then(buf => { 
-                                    dbg.innerHTML += 'VRM fetched (' + (buf.byteLength || buf.length) + ' bytes).<br>';
-                                    const wTx = db.transaction('vrm', 'readwrite'); wTx.objectStore('vrm').put(buf, CACHE_KEY); resolve(buf); 
-                                }).catch(err => { dbg.innerHTML += 'VRM fetch error: ' + err.message + '<br>'; reject(err); }); 
-                            } 
-                        };
-                    };
-                });
+                
+                // 直接使用 fetch，依赖浏览器原生 HTTP 缓存（更稳、更快）
+                const fetchWithTimeout = (url, timeout = 120000) => {
+                    return Promise.race([
+                        fetch(url, { 
+                            headers: { 'Accept': 'model/vrm, application/octet-stream, */*' },
+                            cache: 'force-cache' // 优先读缓存
+                        }),
+                        new Promise((_, rej) => setTimeout(() => rej(new Error('Download timeout (120s)')), timeout))
+                    ]);
+                };
+
+                try {
+                    dbg.innerHTML += 'Fetching VRM (15MB)...<br>';
+                    document.getElementById('loader-text').innerText = '准备下载...';
+                    
+                    const res = await fetchWithTimeout(MODEL_URL);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    
+                    const contentLength = res.headers.get('content-length');
+                    const total = contentLength ? parseInt(contentLength) : 0;
+                    let loaded = 0;
+                    
+                    const fill = document.getElementById('progress-fill');
+                    const text = document.getElementById('loader-text');
+
+                    // 如果有缓存，可能瞬间完成 (status 304)
+                    if (res.status === 304 || total === 0) {
+                         text.innerText = '模型已就绪';
+                         fill.style.width = '100%';
+                    } else {
+                         // 流式下载显示进度
+                         const reader = res.body.getReader();
+                         const chunks = [];
+                         
+                         const readStream = () => reader.read().then(({ done, value }) => {
+                             if (done) {
+                                 const buf = new Uint8Array(loaded);
+                                 let offset = 0;
+                                 for (const chunk of chunks) { buf.set(chunk, offset); offset += chunk.length; }
+                                 fill.style.width = '100%';
+                                 text.innerText = '模型下载完成，解析中...';
+                                 return buf.buffer;
+                             }
+                             chunks.push(value); loaded += value.length;
+                             
+                             const pct = total ? Math.round((loaded / total) * 100) : '?';
+                             text.innerText = `模型加载中 ${pct}%`;
+                             fill.style.width = `${pct}%`;
+                             return readStream();
+                         });
+                         return readStream();
+                    }
+                    
+                    // Fallback for non-streaming (e.g. cached response returned as blob directly)
+                    return res.arrayBuffer();
+
+                } catch (err) { 
+                    dbg.innerHTML += 'VRM fetch error: ' + err.message + '<br>'; 
+                    throw err; 
+                }
             }
 
             loadVRMBuffer().then(buf => {
@@ -339,7 +555,7 @@
                 loader.parse(buf, '', (gltf) => {
                     vrm = gltf.userData.vrm; if (!vrm) { throw new Error('VRM 解析失败'); }
                     if (vrm.meta.metaVersion === '0') VRMUtils.rotateVRM0(vrm);
-                    vrm.scene.rotation.y = Math.PI; scene.add(vrm.scene); vrm.scene.scale.set(0.9, 0.9, 0.9); vrm.scene.position.set(0, 0.1, 0);
+                    vrm.scene.rotation.y = Math.PI; scene.add(vrm.scene); vrm.scene.scale.set(1.15, 1.15, 1.15); vrm.scene.position.set(0, 0, -1.5);
                     vrm.scene.traverse(obj => { if (obj.isMesh && obj.material) { obj.material.needsUpdate = true; if (obj.material.map) obj.material.map.colorSpace = THREE.SRGBColorSpace; } });
                     document.getElementById('loader').style.display = 'none';
                     document.getElementById('start-overlay').style.display = 'flex';
@@ -355,9 +571,15 @@
             // === 动画循环 ===
             let mouthTarget = 0; let blinkTimer = 0; let isSpeaking = false;
             let isPlayingAudio = false; let currentMouthOpen = 0;
+            let lastFrameTime = 0; const targetFPS = 20; const frameInterval = 1000 / targetFPS; // 20帧：数字人静态场景足够，GPU降载33%
+            let lastEmotionUpdate = 0; // 情绪系统更新时间戳
+            let cachedBones = null; // 骨骼节点引用缓存
 
-            function animate() {
+            function animate(time) {
                 requestAnimationFrame(animate);
+                if (time - lastFrameTime < frameInterval) return; // 限制20帧
+                lastFrameTime = time;
+                
                 const delta = clock.getDelta(); const t = clock.getElapsedTime();
                 
                 if (vrm) {
@@ -365,58 +587,381 @@
                     currentRotY = THREE.MathUtils.lerp(currentRotY, targetRotY, 0.1);
                     vrm.scene.rotation.y = Math.PI + currentRotY;
                     vrm.scene.position.x = THREE.MathUtils.lerp(vrm.scene.position.x, charTargetPos.x, 0.05);
-                    vrm.scene.position.y = charTargetPos.y + Math.sin(t * 1.5) * 0.015;
+                    vrm.scene.position.y = charTargetPos.y + Math.sin(t * 1.2) * 0.008;
                     vrm.scene.position.z = THREE.MathUtils.lerp(vrm.scene.position.z, charTargetPos.z, 0.05);
 
-                    const head = vrm.humanoid.getNormalizedBoneNode('head');
-                    const chest = vrm.humanoid.getNormalizedBoneNode('chest');
-                    const lArm = vrm.humanoid.getNormalizedBoneNode('leftUpperArm');
-                    const rArm = vrm.humanoid.getNormalizedBoneNode('rightUpperArm');
-                    const rForeArm = vrm.humanoid.getNormalizedBoneNode('rightLowerArm');
+                    // 骨骼节点引用（每帧调用getNormalizedBoneNode有开销，改为懒加载缓存）
+                    if (!cachedBones) {
+                        cachedBones = {
+                            head: vrm.humanoid.getNormalizedBoneNode('head'),
+                            chest: vrm.humanoid.getNormalizedBoneNode('chest'),
+                            lArm: vrm.humanoid.getNormalizedBoneNode('leftUpperArm'),
+                            rArm: vrm.humanoid.getNormalizedBoneNode('rightUpperArm'),
+                            rForeArm: vrm.humanoid.getNormalizedBoneNode('rightLowerArm'),
+                            lForeArm: vrm.humanoid.getNormalizedBoneNode('leftLowerArm'),
+                            lWrist: vrm.humanoid.getNormalizedBoneNode('leftHand'),
+                            rWrist: vrm.humanoid.getNormalizedBoneNode('rightHand')
+                        };
+                    }
+                    const { head, chest, lArm, rArm, rForeArm, lForeArm, lWrist, rWrist } = cachedBones;
 
                     let targetH = { x: 0, y: 0, z: 0 }; let targetC = { x: 0, y: 0, z: 0 };
-                    let targetLA = { x: 0, y: 0, z: 1.6 }; let targetRA = { x: 0, y: 0, z: -1.6 }; let targetRFA = { x: 0, y: 0, z: 0 };
+                    // Idle 待机姿态参数（由调试面板 v0.4.61 调优）
+                    let targetLA = { x: 0.0, y: 0.0, z: 1.45 };
+                    let targetRA = { x: 0.0, y: 0.0, z: -1.45 };
+                    let targetRFA = { x: 0.0, y: 0.0, z: 0 };  // rightLowerArm
+                    let targetLFA = { x: 0.0, y: 0.0, z: 0 };     // leftLowerArm
+                    let targetLW = { x: -0.05, y: 0, z: 0.25 };
+                    let targetRW = { x: -0.05, y: 0, z: -0.25 };
+                    
+                    // 应用胸部微倾
+                    targetC.x = -0.04;
 
                     const bodyLang = EMOTION_BODY_LANG[emotionState.current] || EMOTION_BODY_LANG[EMOTIONS.CALM];
                     targetH.x = Math.sin(t * (bodyLang.bounceFreq || 0.8)) * (bodyLang.headBounce || 0.02);
                     targetH.z = Math.sin(t * 0.6) * (bodyLang.headTilt || 0);
-                    targetLA.z = 1.6 + (bodyLang.armSpread || 0); targetRA.z = -1.6 - (bodyLang.armSpread || 0);
+                    // Idle 基础姿态已由上面设置，这里不覆盖
+                    
+                    // Idle 手掌微动作（呼吸节奏下的自然微动）
+                    if (currentState === STATES.IDLE) {
+                        targetLW.x = -0.05 + Math.sin(t * 0.7) * 0.02;   // 手腕微倾
+                        targetLW.z = 0.25 + Math.sin(t * 0.5 + 0.5) * 0.03; // 手掌微旋转
+                        targetRW.x = -0.05 + Math.sin(t * 0.7 + 1.0) * 0.02;
+                        targetRW.z = -0.25 + Math.sin(t * 0.5 + 1.5) * 0.03;
+                    }
 
                     if (greetingAnim.active) {
                         greetingAnim.t += delta; const p = Math.min(greetingAnim.t / 0.5, 1);
                         if (greetingAnim.t < 3.0) {
                             const wave = Math.sin(greetingAnim.t * 6) * (greetingAnim.waveAmp || 0.2);
-                            targetRA.z = THREE.MathUtils.lerp(-1.6, -1.5, p); targetRA.x = THREE.MathUtils.lerp(0, greetingAnim.xAngle || 0.5, p);
+                            targetRA.z = THREE.MathUtils.lerp(-1.45, -1.5, p); targetRA.x = THREE.MathUtils.lerp(0, greetingAnim.xAngle || 0.5, p);
                             targetRA.y = THREE.MathUtils.lerp(0, greetingAnim.yAngle || -0.3, p); targetRFA.x = THREE.MathUtils.lerp(0, greetingAnim.elbowAngle || 1.2, p);
                             targetRFA.z = wave;
                         } else { greetingAnim.active = false; if(currentState === STATES.GREETING) setState(STATES.IDLE); }
-                    } else if (currentState === STATES.THINKING) { targetH.z = 0.2; targetH.y = -0.15; targetRA.z = -0.8; targetRA.x = 0.6; } 
-                    else if (currentState === STATES.SPEAKING || currentState === STATES.TEACHING) { targetH.x += Math.abs(Math.sin(t * 6)) * 0.06; targetC.x = -0.05; targetLA.z = 1.4; targetRA.z = -1.4; }
+                    } else if (currentState === STATES.THINKING) { 
+                        targetH.z = 0.2; targetH.y = -0.15; 
+                        targetRA.z = -0.8; targetRA.x = 0.6; 
+                    } 
+                    else if (currentState === STATES.SPEAKING || currentState === STATES.TEACHING) { 
+                        // 基于 idle 姿态的偏移
+                        targetH.x += Math.abs(Math.sin(t * 6)) * 0.06; 
+                        targetC.x = -0.05; 
+                        // 手臂微微张开（在 idle 基础上偏移）
+                        targetLA.z += 0.1;  // 1.45 → 1.55
+                        targetRA.z -= 0.1;  // -1.45 → -1.55
+                        targetLA.y += 0.05; // 0 → 0.05
+                        targetRA.y += 0.05; // 0 → 0.05
+                        targetLA.x += 0.05; // 0 → 0.05
+                        targetRA.x += 0.05; // 0 → 0.05
+                        targetRFA.x -= 0.2; // 0 → -0.2
+                        targetLFA.x += 0.2; // 0 → 0.2
+                    }
 
                     targetH.x += mouseY * 0.15; targetH.y += mouseX * 0.35;
 
                     function clampArm(target, minZ, maxZ, minX, maxX, minY, maxY) { target.z = Math.max(minZ, Math.min(maxZ, target.z)); target.x = Math.max(minX, Math.min(maxX, target.x)); target.y = Math.max(minY, Math.min(maxY, target.y)); return target; }
-                    clampArm(targetRA, -3.0, -1.0, -2.0, 1.5, -1.5, 1.5); clampArm(targetRFA, -2.5, 0.5, -0.5, 0.5, -1.0, 1.0); clampArm(targetLA, 1.0, 2.5, -1.0, 1.0, -1.0, 1.0);
+                    clampArm(targetRA, -3.0, 0.5, -2.0, 1.5, -1.5, 1.5); clampArm(targetRFA, -2.5, 0.5, -0.5, 0.5, -1.0, 1.0); clampArm(targetLA, -0.5, 3.0, -1.5, 1.5, -1.5, 1.5);
 
                     const speed = 0.1;
-                    if (head) { head.rotation.x = THREE.MathUtils.lerp(head.rotation.x, targetH.x, speed); head.rotation.y = THREE.MathUtils.lerp(head.rotation.y, targetH.y, speed); head.rotation.z = THREE.MathUtils.lerp(head.rotation.z, targetH.z, speed); }
-                    if (chest) chest.rotation.x = THREE.MathUtils.lerp(chest.rotation.x, targetC.x, speed);
-                    if (lArm) lArm.rotation.z = THREE.MathUtils.lerp(lArm.rotation.z, targetLA.z, speed);
-                    if (rArm) { rArm.rotation.z = THREE.MathUtils.lerp(rArm.rotation.z, targetRA.z, speed); rArm.rotation.x = THREE.MathUtils.lerp(rArm.rotation.x, targetRA.x, speed); rArm.rotation.y = THREE.MathUtils.lerp(rArm.rotation.y, targetRA.y, speed); }
-                    if (rForeArm) rForeArm.rotation.x = THREE.MathUtils.lerp(rForeArm.rotation.x, targetRFA.x, speed);
+                    
+                    // 调试模式：使用当前选中状态的骨骼参数
+                    if (debugModeActive && window.poseDebug) {
+                        const currentPoseState = window.poseDebug.getState(window.poseDebug.getCurrentState());
+                        if (head) {
+                            head.rotation.x = THREE.MathUtils.lerp(head.rotation.x, currentPoseState.head.x, speed);
+                            head.rotation.y = THREE.MathUtils.lerp(head.rotation.y, currentPoseState.head.y, speed);
+                            head.rotation.z = THREE.MathUtils.lerp(head.rotation.z, currentPoseState.head.z, speed);
+                        }
+                        if (chest) chest.rotation.x = THREE.MathUtils.lerp(chest.rotation.x, currentPoseState.chest.x, speed);
+                        if (lArm) {
+                            lArm.rotation.x = THREE.MathUtils.lerp(lArm.rotation.x, currentPoseState.leftUpperArm.x, speed);
+                            lArm.rotation.y = THREE.MathUtils.lerp(lArm.rotation.y, currentPoseState.leftUpperArm.y, speed);
+                            lArm.rotation.z = THREE.MathUtils.lerp(lArm.rotation.z, currentPoseState.leftUpperArm.z, speed);
+                        }
+                        if (rArm) {
+                            rArm.rotation.x = THREE.MathUtils.lerp(rArm.rotation.x, currentPoseState.rightUpperArm.x, speed);
+                            rArm.rotation.y = THREE.MathUtils.lerp(rArm.rotation.y, currentPoseState.rightUpperArm.y, speed);
+                            rArm.rotation.z = THREE.MathUtils.lerp(rArm.rotation.z, currentPoseState.rightUpperArm.z, speed);
+                        }
+                        if (lForeArm) {
+                            lForeArm.rotation.x = THREE.MathUtils.lerp(lForeArm.rotation.x, currentPoseState.leftLowerArm.x, speed);
+                            lForeArm.rotation.y = THREE.MathUtils.lerp(lForeArm.rotation.y, currentPoseState.leftLowerArm.y, speed);
+                        }
+                        if (rForeArm) {
+                            rForeArm.rotation.x = THREE.MathUtils.lerp(rForeArm.rotation.x, currentPoseState.rightLowerArm.x, speed);
+                            rForeArm.rotation.y = THREE.MathUtils.lerp(rForeArm.rotation.y, currentPoseState.rightLowerArm.y, speed);
+                        }
+                        if (lWrist) {
+                            lWrist.rotation.x = THREE.MathUtils.lerp(lWrist.rotation.x, currentPoseState.leftHand.x, speed);
+                            lWrist.rotation.y = THREE.MathUtils.lerp(lWrist.rotation.y, currentPoseState.leftHand.y, speed);
+                            lWrist.rotation.z = THREE.MathUtils.lerp(lWrist.rotation.z, currentPoseState.leftHand.z, speed);
+                        }
+                        if (rWrist) {
+                            rWrist.rotation.x = THREE.MathUtils.lerp(rWrist.rotation.x, currentPoseState.rightHand.x, speed);
+                            rWrist.rotation.y = THREE.MathUtils.lerp(rWrist.rotation.y, currentPoseState.rightHand.y, speed);
+                            rWrist.rotation.z = THREE.MathUtils.lerp(rWrist.rotation.z, currentPoseState.rightHand.z, speed);
+                        }
+                    } else {
+                        // 正常模式：使用自动动画
+                        if (head) { head.rotation.x = THREE.MathUtils.lerp(head.rotation.x, targetH.x, speed); head.rotation.y = THREE.MathUtils.lerp(head.rotation.y, targetH.y, speed); head.rotation.z = THREE.MathUtils.lerp(head.rotation.z, targetH.z, speed); }
+                        if (chest) chest.rotation.x = THREE.MathUtils.lerp(chest.rotation.x, targetC.x, speed);
+                        if (lArm) { lArm.rotation.z = THREE.MathUtils.lerp(lArm.rotation.z, targetLA.z, speed); lArm.rotation.x = THREE.MathUtils.lerp(lArm.rotation.x, targetLA.x, speed); lArm.rotation.y = THREE.MathUtils.lerp(lArm.rotation.y, targetLA.y, speed); }
+                        if (rArm) { rArm.rotation.z = THREE.MathUtils.lerp(rArm.rotation.z, targetRA.z, speed); rArm.rotation.x = THREE.MathUtils.lerp(rArm.rotation.x, targetRA.x, speed); rArm.rotation.y = THREE.MathUtils.lerp(rArm.rotation.y, targetRA.y, speed); }
+                        if (rForeArm) { rForeArm.rotation.x = THREE.MathUtils.lerp(rForeArm.rotation.x, targetRFA.x, speed); rForeArm.rotation.y = THREE.MathUtils.lerp(rForeArm.rotation.y, targetRFA.y, speed); }
+                        if (lForeArm) { lForeArm.rotation.x = THREE.MathUtils.lerp(lForeArm.rotation.x, targetLFA.x, speed); lForeArm.rotation.y = THREE.MathUtils.lerp(lForeArm.rotation.y, targetLFA.y, speed); }
+                        if (lWrist) { lWrist.rotation.x = THREE.MathUtils.lerp(lWrist.rotation.x, targetLW.x, speed); lWrist.rotation.y = THREE.MathUtils.lerp(lWrist.rotation.y, targetLW.y, speed); lWrist.rotation.z = THREE.MathUtils.lerp(lWrist.rotation.z, targetLW.z, speed); }
+                        if (rWrist) { rWrist.rotation.x = THREE.MathUtils.lerp(rWrist.rotation.x, targetRW.x, speed); rWrist.rotation.y = THREE.MathUtils.lerp(rWrist.rotation.y, targetRW.y, speed); rWrist.rotation.z = THREE.MathUtils.lerp(rWrist.rotation.z, targetRW.z, speed); }
+                    }
 
                     blinkTimer += delta; if (blinkTimer > 3.0 + Math.random() * 2.0) { vrm.expressionManager.setValue('blink', 1); setTimeout(() => vrm.expressionManager.setValue('blink', 0), 150); blinkTimer = 0; }
-                    decayEmotions(delta); applyEmotionToAvatar();
-                    if (Math.floor(t * 4) % 2 === 0) updateEmotionUI();
 
-                    if (isPlayingAudio) mouthTarget = THREE.MathUtils.lerp(mouthTarget, currentMouthOpen, 0.2);
-                    else mouthTarget = THREE.MathUtils.lerp(mouthTarget, 0, 0.2);
-                    vrm.expressionManager.setValue('aa', mouthTarget);
+                    // 情绪系统：每0.5秒更新一次（而非每帧），减少CPU开销
+                    if (t - lastEmotionUpdate > 0.5) {
+                        decayEmotions(0.5); applyEmotionToAvatar();
+                        updateEmotionUI();
+                        lastEmotionUpdate = t;
+                    }
+
+                    // 口型：简化插值
+                    const newMouthTarget = isPlayingAudio ? currentMouthOpen : 0;
+                    if (Math.abs(mouthTarget - newMouthTarget) > 0.01) {
+                        mouthTarget = THREE.MathUtils.lerp(mouthTarget, newMouthTarget, 0.2);
+                        vrm.expressionManager.setValue('aa', mouthTarget);
+                    }
                 }
+                
+                // Spotlight disk subtle pulse（每2秒更新一次）
+                if (Math.floor(t * 2) !== Math.floor((t - 0.05) * 2)) {
+                    spotDisk.material.opacity = 0.1 + Math.sin(t * 1.2) * 0.05;
+                }
+                
                 renderer.render(scene, camera);
             }
             animate();
             dbg.innerHTML += 'Animation loop started.<br>';
+
+            // === 骨骼调试面板（支持多状态）===
+            const POSE_DEBUG_BONES = [
+                { name: 'head', axes: ['x', 'y', 'z'], range: [-0.5, 0.5], step: 0.01 },
+                { name: 'chest', axes: ['x'], range: [-0.3, 0.3], step: 0.01 },
+                { name: 'leftUpperArm', axes: ['x', 'y', 'z'], range: [-2.0, 2.0], step: 0.05 },
+                { name: 'rightUpperArm', axes: ['x', 'y', 'z'], range: [-2.0, 2.0], step: 0.05 },
+                { name: 'leftLowerArm', axes: ['x', 'y'], range: [-1.5, 1.5], step: 0.05 },
+                { name: 'rightLowerArm', axes: ['x', 'y'], range: [-1.5, 1.5], step: 0.05 },
+                { name: 'leftHand', axes: ['x', 'y', 'z'], range: [-1.0, 1.0], step: 0.05 },
+                { name: 'rightHand', axes: ['x', 'y', 'z'], range: [-1.0, 1.0], step: 0.05 },
+            ];
+
+            const poseSlidersContainer = document.getElementById('pose-sliders');
+            const poseDebugPanel = document.getElementById('pose-debug');
+            const poseCloseBtn = document.getElementById('pose-debug-close');
+            const poseCopyBtn = document.getElementById('pose-copy-btn');
+            const poseCopyAllBtn = document.getElementById('pose-copy-all-btn');
+            const poseCopyMsg = document.getElementById('pose-copy-msg');
+            const poseStateSelect = document.getElementById('pose-state-select');
+
+            // 存储每个状态的骨骼参数
+            let debugPoseStates = {
+                idle: {},
+                speaking: {},
+                teaching: {},
+                thinking: {},
+                greeting: {}
+            };
+            let debugCurrentState = 'idle';
+            let debugModeActive = false;
+
+            // 初始化单个状态的参数（全部归零）
+            function initStateParams(stateName) {
+                const params = {};
+                POSE_DEBUG_BONES.forEach(bone => {
+                    params[bone.name] = {};
+                    bone.axes.forEach(axis => {
+                        params[bone.name][axis] = 0;
+                    });
+                });
+                return params;
+            }
+
+            // 初始化所有状态
+            Object.keys(debugPoseStates).forEach(stateName => {
+                debugPoseStates[stateName] = initStateParams(stateName);
+            });
+
+            // 初始化滑块
+            function initPoseDebugPanel() {
+                if (!poseSlidersContainer) return;
+                poseSlidersContainer.innerHTML = '';
+
+                POSE_DEBUG_BONES.forEach(bone => {
+                    const boneSection = document.createElement('div');
+                    boneSection.style.marginBottom = '12px';
+                    boneSection.innerHTML = `<div style="color:#00f2ff; font-weight:bold; margin-bottom:4px; font-size:11px;">${bone.name}</div>`;
+
+                    bone.axes.forEach(axis => {
+                        const key = `${bone.name}.${axis}`;
+
+                        const row = document.createElement('div');
+                        row.style.display = 'flex';
+                        row.style.alignItems = 'center';
+                        row.style.gap = '6px';
+                        row.style.marginBottom = '4px';
+
+                        const label = document.createElement('span');
+                        label.textContent = axis.toUpperCase();
+                        label.style.color = '#aaa';
+                        label.style.fontSize = '10px';
+                        label.style.width = '12px';
+                        label.style.textAlign = 'center';
+
+                        const slider = document.createElement('input');
+                        slider.type = 'range';
+                        slider.id = `pose-slider-${key}`;
+                        slider.min = bone.range[0];
+                        slider.max = bone.range[1];
+                        slider.step = bone.step;
+                        slider.style.flex = '1';
+                        slider.style.height = '4px';
+                        slider.style.cursor = 'pointer';
+
+                        const valueDisplay = document.createElement('span');
+                        valueDisplay.id = `pose-val-${key}`;
+                        valueDisplay.textContent = '0.00';
+                        valueDisplay.style.color = '#4ade80';
+                        valueDisplay.style.fontSize = '10px';
+                        valueDisplay.style.width = '40px';
+                        valueDisplay.style.textAlign = 'right';
+                        valueDisplay.style.fontFamily = 'monospace';
+
+                        slider.addEventListener('input', () => {
+                            const val = parseFloat(slider.value);
+                            debugPoseStates[debugCurrentState][bone.name][axis] = val;
+                            valueDisplay.textContent = val.toFixed(2);
+                        });
+
+                        row.appendChild(label);
+                        row.appendChild(slider);
+                        row.appendChild(valueDisplay);
+                        boneSection.appendChild(row);
+                    });
+
+                    poseSlidersContainer.appendChild(boneSection);
+                });
+            }
+
+            // 加载某个状态到滑块
+            function loadStateToSliders(stateName) {
+                debugCurrentState = stateName;
+                const state = debugPoseStates[stateName];
+                POSE_DEBUG_BONES.forEach(bone => {
+                    bone.axes.forEach(axis => {
+                        const key = `${bone.name}.${axis}`;
+                        const slider = document.getElementById(`pose-slider-${key}`);
+                        const display = document.getElementById(`pose-val-${key}`);
+                        if (slider) slider.value = state[bone.name][axis];
+                        if (display) display.textContent = state[bone.name][axis].toFixed(2);
+                    });
+                });
+            }
+
+            // 状态选择器事件
+            if (poseStateSelect) {
+                poseStateSelect.addEventListener('change', (e) => {
+                    loadStateToSliders(e.target.value);
+                });
+            }
+
+            // 初始化面板
+            initPoseDebugPanel();
+            loadStateToSliders('idle');
+
+            // 关闭按钮
+            if (poseCloseBtn) {
+                poseCloseBtn.addEventListener('click', () => {
+                    if (poseDebugPanel) poseDebugPanel.style.display = 'none';
+                    debugModeActive = false;
+                });
+            }
+
+            // 复制当前状态参数
+            if (poseCopyBtn) {
+                poseCopyBtn.addEventListener('click', () => {
+                    const poseData = {};
+                    const state = debugPoseStates[debugCurrentState];
+                    POSE_DEBUG_BONES.forEach(bone => {
+                        poseData[bone.name] = {};
+                        bone.axes.forEach(axis => {
+                            poseData[bone.name][axis] = state[bone.name][axis];
+                        });
+                    });
+
+                    const jsonStr = JSON.stringify(poseData, null, 2);
+                    navigator.clipboard.writeText(jsonStr).then(() => {
+                        if (poseCopyMsg) {
+                            poseCopyMsg.textContent = `✅ 已复制 ${debugCurrentState} 状态`;
+                            setTimeout(() => { poseCopyMsg.textContent = ''; }, 2000);
+                        }
+                    }).catch(() => {
+                        const temp = document.createElement('textarea');
+                        temp.value = jsonStr;
+                        document.body.appendChild(temp);
+                        temp.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(temp);
+                        if (poseCopyMsg) {
+                            poseCopyMsg.textContent = `✅ 已复制 ${debugCurrentState}（兜底）`;
+                            setTimeout(() => { poseCopyMsg.textContent = ''; }, 2000);
+                        }
+                    });
+                });
+            }
+
+            // 复制全部状态
+            if (poseCopyAllBtn) {
+                poseCopyAllBtn.addEventListener('click', () => {
+                    const jsonStr = JSON.stringify(debugPoseStates, null, 2);
+                    navigator.clipboard.writeText(jsonStr).then(() => {
+                        if (poseCopyMsg) {
+                            poseCopyMsg.textContent = '✅ 已复制全部状态';
+                            setTimeout(() => { poseCopyMsg.textContent = ''; }, 2000);
+                        }
+                    }).catch(() => {
+                        const temp = document.createElement('textarea');
+                        temp.value = jsonStr;
+                        document.body.appendChild(temp);
+                        temp.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(temp);
+                        if (poseCopyMsg) {
+                            poseCopyMsg.textContent = '✅ 已复制全部状态（兜底）';
+                            setTimeout(() => { poseCopyMsg.textContent = ''; }, 2000);
+                        }
+                    });
+                });
+            }
+
+            // 暴露调试接口到 window
+            window.poseDebug = {
+                getStates: () => debugPoseStates,
+                getCurrentState: () => debugCurrentState,
+                getState: (name) => debugPoseStates[name],
+                setState: (name, params) => { debugPoseStates[name] = params; },
+                loadState: (name) => loadStateToSliders(name),
+                isActive: () => debugModeActive,
+                setActive: (active) => { debugModeActive = active; }
+            };
+
+            // 监听面板显示/隐藏
+            if (poseDebugPanel) {
+                const observer = new MutationObserver((mutations) => {
+                    mutations.forEach((mutation) => {
+                        if (mutation.attributeName === 'style') {
+                            debugModeActive = poseDebugPanel.style.display === 'block';
+                        }
+                    });
+                });
+                observer.observe(poseDebugPanel, { attributes: true });
+            }
 
             // === 交互 ===
             let audioUnlocked = false;
@@ -428,8 +973,8 @@
                     document.getElementById('start-overlay').style.display = 'none'; 
                     updateEmotion('happy', 0.7); 
                     greetingAnim = { active: true, t: 0, xAngle: 0.5, yAngle: -0.3, elbowAngle: 1.2, waveAmp: 0.2 }; 
-                    showChat(`${PERSONALITY.name}: 你好呀！我是${PERSONALITY.name}，你的AI讲师~`, 'ai'); 
-                    speak(`你好呀！我是${PERSONALITY.name}，你的AI讲师`); 
+                    showChat(`${PERSONALITY.name}: 你好呀！我是智能体讲师，小星~`, 'ai'); 
+                    speak(`你好呀！我是智能体讲师，小星`); 
                 };
             }
 
@@ -438,14 +983,22 @@
 
             // === 语音 & TTS ===
             let lipSyncFrame;
+            let lipSyncStartTime = 0;
+            let lipSyncDuration = 0;
             function startSimulatedLipSync(durationMs) {
-                isPlayingAudio = true; const startTime = Date.now();
+                // 设置参数但不立即启动，等音频真正播放时才开始
+                lipSyncDuration = durationMs;
+            }
+            function activateLipSync() {
+                // 音频开始播放时调用
+                isPlayingAudio = true;
+                lipSyncStartTime = Date.now();
                 function animateMouth() {
-                    const elapsed = Date.now() - startTime;
-                    if (elapsed >= durationMs) { isPlayingAudio = false; currentMouthOpen = 0; return; }
+                    const elapsed = Date.now() - lipSyncStartTime;
+                    if (elapsed >= lipSyncDuration) { isPlayingAudio = false; currentMouthOpen = 0; return; }
                     const t = elapsed / 1000;
                     currentMouthOpen = (Math.sin(t * 12) * 0.3 + 0.4) * (0.8 + Math.random() * 0.4);
-                    if (elapsed > durationMs * 0.9) currentMouthOpen *= (durationMs - elapsed) / (durationMs * 0.1);
+                    if (elapsed > lipSyncDuration * 0.9) currentMouthOpen *= (lipSyncDuration - elapsed) / (lipSyncDuration * 0.1);
                     requestAnimationFrame(animateMouth);
                 }
                 requestAnimationFrame(animateMouth);
@@ -490,7 +1043,12 @@
                         console.log('TTS fallback: Simulated Deep Male');
                     }
 
-                    utterance.onend = () => { stopSimulatedLipSync(); resolve(); };
+                    // speechSynthesis 有 onStart 事件，用它来同步
+                    utterance.onstart = () => {
+                        setState(STATES.SPEAKING);
+                        activateLipSync();
+                    };
+                    utterance.onend = () => { stopSimulatedLipSync(); setState(STATES.IDLE); resolve(); };
                     utterance.onerror = () => { stopSimulatedLipSync(); resolve(); };
                     speechSynthesis.speak(utterance);
                 });
@@ -516,15 +1074,18 @@
                             const url = URL.createObjectURL(blob);
                             const audio = new Audio(url);
                             
-                            // 音频开始播放时才启动口型，避免空等延迟
+                            // 音频开始播放时才启动口型和SPEAKING状态，确保声音/嘴形/动作完全同步
                             audio.onplaying = () => {
+                                setState(STATES.SPEAKING);
                                 const dur = audio.duration > 0 ? audio.duration * 1000 : text.length * 350;
                                 startSimulatedLipSync(dur);
+                                activateLipSync();
                             };
                             
                             audio.onended = () => { 
                                 URL.revokeObjectURL(url); 
                                 stopSimulatedLipSync(); 
+                                setState(STATES.IDLE);
                                 resolve(); 
                             };
                             audio.onerror = () => { 
@@ -549,34 +1110,37 @@
             // === 射线 & 拖拽 ===
             const raycaster = new THREE.Raycaster(); const mouseVec = new THREE.Vector2();
             let isDragging = false; let pointerDownX = 0; let pointerDownY = 0;
+            let isTouchingCharacter = false; // 标记触摸是否在角色上
             const interactEl = renderer.domElement;
             
             interactEl.addEventListener('pointerdown', (e) => { 
                 isDragging = false; pointerDownX = e.clientX; pointerDownY = e.clientY;
+                // 立即检测点击位置是否在角色上
+                if (vrm) {
+                    mouseVec.x = (e.clientX / window.innerWidth) * 2 - 1;
+                    mouseVec.y = -(e.clientY / window.innerHeight) * 2 + 1;
+                    raycaster.setFromCamera(mouseVec, camera);
+                    const hits = raycaster.intersectObjects(vrm.scene.children, true);
+                    isTouchingCharacter = hits.length > 0;
+                }
             });
             
             interactEl.addEventListener('pointermove', (e) => { 
                 mouseX = (e.clientX / window.innerWidth) * 2 - 1; mouseY = -(e.clientY / window.innerHeight) * 2 + 1; 
-                if (e.buttons === 1) { 
+                // 只有触摸在角色上时才允许旋转
+                if (isTouchingCharacter && e.buttons === 1) { 
                     const dx = e.clientX - pointerDownX; const dy = e.clientY - pointerDownY; 
                     if (Math.abs(dx) > 8 || Math.abs(dy) > 8) { isDragging = true; targetRotY += dx * 0.008; pointerDownX = e.clientX; pointerDownY = e.clientY; } 
                 } 
             });
             
             interactEl.addEventListener('pointerup', (e) => { 
-                if (!isDragging && vrm) {
-                    // 仅在未拖动时检测点击位置
-                    mouseVec.x = (e.clientX / window.innerWidth) * 2 - 1;
-                    mouseVec.y = -(e.clientY / window.innerHeight) * 2 + 1;
-                    raycaster.setFromCamera(mouseVec, camera);
-                    const hits = raycaster.intersectObject(vrm.scene, true);
-                    if (hits.length > 0) {
-                        console.log('[Debug] Character clicked!');
-                        updateEmotion('happy', 0.5); greetingAnim = { active: true, t: 0, xAngle: 0.2 + Math.random() * 0.3, yAngle: -0.2 + Math.random() * 0.4, elbowAngle: -1.0 + Math.random() * 0.5, waveAmp: 0.15 + Math.random() * 0.15 }; 
-                        setState(STATES.GREETING); const msg = ["你好呀！很高兴见到你~", "嗨！今天过得怎么样？", "嘿！有什么想聊的吗？"][Math.floor(Math.random() * 3)]; showChat(msg, 'ai'); speak(msg); 
-                    }
-                }
-                isDragging = false;
+                // 仅在未拖动、触摸在角色上且非演讲模式时触发问候
+                if (!isDragging && isTouchingCharacter && currentMode === null) { 
+                    updateEmotion('happy', 0.5); greetingAnim = { active: true, t: 0, xAngle: 0.2 + Math.random() * 0.3, yAngle: -0.2 + Math.random() * 0.4, elbowAngle: -1.0 + Math.random() * 0.5, waveAmp: 0.15 + Math.random() * 0.15 }; 
+                    setState(STATES.GREETING); const msg = ["你好呀！很高兴见到你~", "嗨！今天过得怎么样？", "嘿！有什么想聊的吗？"][Math.floor(Math.random() * 3)]; showChat(msg, 'ai'); speak(msg); 
+                } 
+                isDragging = false; isTouchingCharacter = false; 
             });
 
             // === AI 对话 ===
@@ -608,44 +1172,128 @@
             document.getElementById('switch-to-text').onclick = () => pill.classList.add('is-typing');
             document.getElementById('switch-to-voice').onclick = () => pill.classList.remove('is-typing');
 
-            // 语音输入
-            let isRecording = false; let mediaRecorder = null;
-            window.isVoiceBusy = () => currentState === STATES.SPEAKING || currentState === STATES.TEACHING;
-            voiceZone.onpointerdown = (e) => { e.preventDefault(); if (window.isVoiceBusy()) return; startRecording(); };
+            // 语音输入 (PCM WAV 录制，动态采样率 + 状态调试)
+            let isRecording = false; let micAuthorized = false; let isProcessing = false;
+            let audioCtx, recorderNode, micStream, pcmChunks;
+            let maxAmplitude = 0;
+            window.isVoiceBusy = () => currentState === STATES.SPEAKING || currentState === STATES.TEACHING || isProcessing;
+
+            function createWavBlob(samples, sampleRate) {
+                const buffer = new ArrayBuffer(44 + samples.length * 2);
+                const view = new DataView(buffer);
+                const writeStr = (o, s) => { for(let i=0;i<s.length;i++) view.setUint8(o+i, s.charCodeAt(i)); };
+                writeStr(0, 'RIFF'); view.setUint32(4, 36 + samples.length * 2, true); writeStr(8, 'WAVE');
+                writeStr(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+                view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true);
+                view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+                writeStr(36, 'data'); view.setUint32(40, samples.length * 2, true);
+                for(let i=0; i<samples.length; i++) view.setInt16(44 + i*2, samples[i], true);
+                return new Blob([buffer], { type: 'audio/wav' });
+            }
+
+            // 麦克风授权
+            async function requestMicPermission() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    stream.getTracks().forEach(t => t.stop());
+                    micAuthorized = true;
+                    document.getElementById('voice-text').innerText = "按住说话";
+                    document.getElementById('voice-icon').innerText = "🎤";
+                    return true;
+                } catch (e) {
+                    showChat('麦克风授权失败，请检查浏览器权限', 'error');
+                    return false;
+                }
+            }
+
+            voiceZone.onpointerdown = async (e) => { e.preventDefault(); if (window.isVoiceBusy()) return; if (!micAuthorized) { await requestMicPermission(); return; } startRecording(); };
             voiceZone.onpointerup = (e) => { e.preventDefault(); if (isRecording) stopRecordingAndSend(); };
             voiceZone.onpointerleave = (e) => { e.preventDefault(); if (isRecording) stopRecordingAndSend(); };
-            function startRecording() {
-                navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-                    mediaRecorder = new MediaRecorder(stream); const chunks = [];
-                    mediaRecorder.ondataavailable = e => chunks.push(e.data);
-                    mediaRecorder.onstop = async () => {
-                        try {
-                            const blob = new Blob(chunks, { type: 'audio/webm' }); const formData = new FormData(); formData.append('audio', blob, 'recording.webm');
-                            const response = await fetch('/stt', { method: 'POST', body: formData });
-                            if (!response.ok) throw new Error(await response.text());
-                            const result = await response.json();
-                            if (result.text) { showChat(`🎤 "${result.text}"`, 'user'); doSend(result.text, true); } else { showChat('未识别到语音', 'error'); }
-                        } catch (e) { 
-                            // 超时或网络错误优化提示
-                            let msg = '语音识别失败';
-                            if (e.message.toLowerCase().includes('timeout') || e.message.includes('deadline')) {
-                                msg = '识别超时，请稍后重试 (网络拥堵)';
-                            } else if (e.message.includes('502') || e.message.includes('500')) {
-                                msg = '服务暂时不可用，请稍后重试';
-                            } else {
-                                msg = `语音识别失败: ${e.message}`;
-                            }
-                            showChat(msg, 'error'); 
+            voiceZone.ontouchstart = async (e) => { e.preventDefault(); if (window.isVoiceBusy()) return; if (!micAuthorized) { await requestMicPermission(); return; } startRecording(); };
+            voiceZone.ontouchend = (e) => { e.preventDefault(); if (isRecording) stopRecordingAndSend(); };
+            voiceZone.oncontextmenu = (e) => { e.preventDefault(); };
+            
+            async function startRecording() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    micStream = stream;
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                    await audioCtx.resume(); // 确保上下文运行
+                    
+                    console.log('[STT] AudioContext initialized. SampleRate:', audioCtx.sampleRate);
+                    
+                    const source = audioCtx.createMediaStreamSource(stream);
+                    recorderNode = audioCtx.createScriptProcessor(4096, 1, 1);
+                    pcmChunks = [];
+                    maxAmplitude = 0;
+
+                    recorderNode.onaudioprocess = e => {
+                        const ch = e.inputBuffer.getChannelData(0);
+                        const buf = new Int16Array(ch.length);
+                        for(let i=0;i<ch.length;i++) {
+                            let val = Math.max(-1, Math.min(1, ch[i]));
+                            buf[i] = val * 0x7FFF;
+                            if (Math.abs(val) > maxAmplitude) maxAmplitude = Math.abs(val);
                         }
-                        stream.getTracks().forEach(t => t.stop());
+                        pcmChunks.push(buf);
                     };
-                    mediaRecorder.start(); isRecording = true;
-                }).catch(e => showChat('无法访问麦克风', 'error'));
+                    source.connect(recorderNode);
+                    recorderNode.connect(audioCtx.destination);
+                    isRecording = true;
+                } catch(e) { showChat('无法访问麦克风: ' + e.message, 'error'); }
             }
-            function stopRecordingAndSend() { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); isRecording = false; }
+
+            function stopRecordingAndSend() {
+                if (!isRecording) return;
+                isRecording = false;
+                if (recorderNode) recorderNode.disconnect();
+                if (audioCtx) audioCtx.close();
+                if (micStream) micStream.getTracks().forEach(t => t.stop());
+                
+                let totalLen = pcmChunks.reduce((s, c) => s + c.length, 0);
+                let allSamples = new Int16Array(totalLen);
+                let offset = 0;
+                for (const chunk of pcmChunks) { allSamples.set(chunk, offset); offset += chunk.length; }
+                
+                console.log('[STT] Max Amplitude:', maxAmplitude.toFixed(4), '| Samples:', totalLen);
+
+                isProcessing = true;
+                document.getElementById('voice-text').innerText = "处理中...";
+                document.getElementById('voice-icon').innerText = "⏳";
+                
+                const wavBlob = createWavBlob(allSamples, audioCtx.sampleRate);
+                console.log('[STT] Format: audio/wav (PCM), Size:', wavBlob.size, 'bytes, Rate:', audioCtx.sampleRate);
+                
+                const formData = new FormData();
+                formData.append('audio', wavBlob, 'recording.wav');
+                
+                fetch('/stt', { method: 'POST', body: formData })
+                    .then(r => r.text().then(t => ({ status: r.status, text: t })))
+                    .then(({ status, text }) => {
+                        console.log('[STT] Response:', status, text.substring(0, 500));
+                        if (status !== 200) throw new Error(text);
+                        const result = JSON.parse(text);
+                        if (result.text) { showChat(`🎤 "${result.text}"`, 'user'); doSend(result.text, true); } else { showChat('未识别到语音', 'error'); }
+                    })
+                    .catch(e => { 
+                        let msg = '语音识别失败';
+                        if (e.message.includes('502') || e.message.includes('500')) msg = '服务暂时不可用';
+                        else msg = `识别失败: ${e.message}`;
+                        showChat(msg, 'error'); 
+                    })
+                    .finally(() => {
+                        isProcessing = false;
+                        if (!currentMode) {
+                            document.getElementById('voice-text').innerText = "按住说话";
+                            document.getElementById('voice-icon').innerText = "🎤";
+                        }
+                    });
+            }
+
             setInterval(() => {
-                if (isRecording) { document.getElementById('voice-text').innerText = "松开 发送"; document.getElementById('voice-icon').innerText = "🎙️"; }
-                else { document.getElementById('voice-text').innerText = "按住说话"; document.getElementById('voice-icon').innerText = "🎤"; }
+                if (isProcessing) { document.getElementById('voice-text').innerText = "处理中..."; document.getElementById('voice-icon').innerText = "⏳"; }
+                else if (isRecording) { document.getElementById('voice-text').innerText = "松开 发送"; document.getElementById('voice-icon').innerText = "🔴"; }
+                else if (!currentMode && micAuthorized) { document.getElementById('voice-text').innerText = "按住说话"; document.getElementById('voice-icon').innerText = "🎤"; }
             }, 200);
             
             // SVG 黑板
@@ -654,15 +1302,18 @@
             let boardVisible = false;
             const SVGBoard = {
                 clear: () => { svgContent.innerHTML = ''; },
-                drawText: (x, y, text, size, color, align) => { const t = document.createElementNS(SVG_NS, 'text'); t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('font-size', size); t.setAttribute('fill', color); t.setAttribute('text-anchor', align || 'start'); t.textContent = text; svgContent.appendChild(t); },
-                drawLine: (x1, y1, x2, y2, color, width, dashed) => { const l = document.createElementNS(SVG_NS, 'line'); l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2); l.setAttribute('stroke', color); l.setAttribute('stroke-width', width); if (dashed) l.setAttribute('stroke-dasharray', '5,5'); svgContent.appendChild(l); }
+                drawText: (x, y, text, size, color, align) => { const t = document.createElementNS(SVG_NS, 'text'); t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('font-size', size); t.setAttribute('fill', color || '#1a1a2e'); t.setAttribute('text-anchor', align || 'start'); t.setAttribute('font-weight', 'bold'); t.textContent = text; svgContent.appendChild(t); },
+                drawLine: (x1, y1, x2, y2, color, width, dashed) => { const l = document.createElementNS(SVG_NS, 'line'); l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2); l.setAttribute('stroke', color || '#0088aa'); l.setAttribute('stroke-width', width || 2); if (dashed) l.setAttribute('stroke-dasharray', '5,5'); svgContent.appendChild(l); },
+                drawRect: (x, y, w, h, fill, stroke, rx) => { const r = document.createElementNS(SVG_NS, 'rect'); r.setAttribute('x', x); r.setAttribute('y', y); r.setAttribute('width', w); r.setAttribute('height', h); r.setAttribute('fill', fill || 'none'); r.setAttribute('stroke', stroke || '#0088aa'); r.setAttribute('stroke-width', '2'); if (rx) r.setAttribute('rx', rx); svgContent.appendChild(r); },
+                drawCircle: (cx, cy, r, fill, stroke) => { const c = document.createElementNS(SVG_NS, 'circle'); c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', r); c.setAttribute('fill', fill || 'none'); c.setAttribute('stroke', stroke || '#0088aa'); c.setAttribute('stroke-width', '2'); svgContent.appendChild(c); }
             };
             function drawSVGAction(action, data) {
                 switch(action) {
-                    case 'write_text': SVGBoard.drawText(data.x, data.y, data.text, 20, data.color || '#fff', 'middle'); break;
-                    case 'draw_line': SVGBoard.drawLine(data.x1, data.y1, data.x2, data.y2, data.color || '#00f2ff', 3, data.dashed); break;
-                    case 'draw_triangle': SVGBoard.drawLine(data.x1, data.y1, data.x2, data.y2, '#fff', 4); SVGBoard.drawLine(data.x2, data.y2, data.x3, data.y3, '#ffd700', 4); SVGBoard.drawLine(data.x3, data.y3, data.x1, data.y1, '#fff', 4); break;
-                    case 'draw_circle': SVGBoard.drawLine(data.x, data.y, data.x + data.r * 2, data.y, '#00f2ff', 3); break;
+                    case 'write_text': SVGBoard.drawText(data.x, data.y, data.text, data.size || 20, data.color || '#1a1a2e', data.align || 'middle'); break;
+                    case 'draw_line': SVGBoard.drawLine(data.x1, data.y1, data.x2, data.y2, data.color || '#0088aa', data.width || 3, data.dashed); break;
+                    case 'draw_rect': SVGBoard.drawRect(data.x, data.y, data.w, data.h, data.fill, data.stroke, data.rx); break;
+                    case 'draw_circle': SVGBoard.drawCircle(data.cx, data.cy, data.r, data.fill, data.stroke || '#0088aa'); break;
+                    case 'draw_triangle': SVGBoard.drawLine(data.x1, data.y1, data.x2, data.y2, '#1a1a2e', 4); SVGBoard.drawLine(data.x2, data.y2, data.x3, data.y3, '#cc9900', 4); SVGBoard.drawLine(data.x3, data.y3, data.x1, data.y1, '#1a1a2e', 4); break;
                     case 'clear': SVGBoard.clear(); break;
                 }
             }
@@ -671,7 +1322,8 @@
                 boardVisible = show;
                 board.style.opacity = show ? '1' : '0';
                 board.style.pointerEvents = show ? 'auto' : 'none';
-                charTargetPos = show ? { x: -1.5, y: 0.1, z: -0.5 } : { x: 0, y: 0.1, z: 0 };
+                charTargetPos = show ? { x: -1.5, y: 0.1, z: -0.5 } : { x: 0, y: 0, z: -1.5 };
+                targetRotY = show ? 0.6 : 0; // Face the board when teaching, face front when idle
                 if (show) setState(STATES.TEACHING); else setState(STATES.IDLE);
                 
                 // Reset views when hiding
@@ -698,18 +1350,301 @@
             
             // 模式切换功能（支持 toggle 关闭 + 博客演讲）
             let currentMode = null; // 当前激活的模式
+            let currentMathPlaying = null;
+            let currentBlogPlaying = null; // 当前正在朗读的博客索引
+            let blogReturnListener = null; // 博客返回监听器
+            let modeSwitching = false; // 模式切换锁
+            // ═══════════════════════════════════════════════════════════
+            // 数学题库系统：每日 5 题，7 天回看
+            // ═══════════════════════════════════════════════════════════
+
+            // --- 题库：二下（二年级下学期）---
+            const BANK_G2S2 = [
+                // 加法竖式
+                { type: '加法竖式', q: '47 + 36 = ?', a: '83', steps: '个位 7+6=13，写3进1；十位 4+3+1=8', speak: '四十七加三十六。个位七加六等于十三，写三进一。十位四加三再加进位的一等于八。答案八十三。' },
+                { type: '加法竖式', q: '58 + 29 = ?', a: '87', steps: '个位 8+9=17，写7进1；十位 5+2+1=8', speak: '五十八加二十九。个位八加九等于十七，写七进一。十位五加二再加一等于八。答案八十七。' },
+                { type: '加法竖式', q: '65 + 48 = ?', a: '113', steps: '个位 5+8=13，写3进1；十位 6+4+1=11', speak: '六十五加四十八。个位五加八等于十三，写三进一。十位六加四再加一等于十一。答案一百一十三。' },
+                { type: '加法竖式', q: '73 + 19 = ?', a: '92', steps: '个位 3+9=12，写2进1；十位 7+1+1=9', speak: '七十三加十九。个位三加九等于十二，写二进一。十位七加一再加一等于九。答案九十二。' },
+                { type: '加法竖式', q: '34 + 57 = ?', a: '91', steps: '个位 4+7=11，写1进1；十位 3+5+1=9', speak: '三十四加五十七。个位四加七等于十一，写一进一。十位三加五再加一等于九。答案九十一。' },
+                { type: '加法竖式', q: '26 + 68 = ?', a: '94', steps: '个位 6+8=14，写4进1；十位 2+6+1=9', speak: '二十六加六十八。个位六加八等于十四，写四进一。十位二加六再加一等于九。答案九十四。' },
+                // 减法竖式
+                { type: '减法竖式', q: '82 - 37 = ?', a: '45', steps: '个位 2-7 不够，借1→12-7=5；十位 7-3=4', speak: '八十二减三十七。个位二减七不够减，从十位借一变成十二减七等于五。十位八借了一剩七，七减三等于四。答案四十五。' },
+                { type: '减法竖式', q: '91 - 46 = ?', a: '45', steps: '个位 1-6 不够，借1→11-6=5；十位 8-4=4', speak: '九十一减四十六。个位一减六不够，借一变成十一减六等于五。十位九借了一剩八，八减四等于四。答案四十五。' },
+                { type: '减法竖式', q: '70 - 28 = ?', a: '42', steps: '个位 0-8 不够，借1→10-8=2；十位 6-2=4', speak: '七十减二十八。个位零减八不够，借一变成十减八等于二。十位七借了一剩六，六减二等于四。答案四十二。' },
+                { type: '减法竖式', q: '63 - 49 = ?', a: '14', steps: '个位 3-9 不够，借1→13-9=4；十位 5-4=1', speak: '六十三减四十九。个位三减九不够，借一变成十三减九等于四。十位六借了一剩五，五减四等于一。答案一十四。' },
+                { type: '减法竖式', q: '85 - 57 = ?', a: '28', steps: '个位 5-7 不够，借1→15-7=8；十位 7-5=2', speak: '八十五减五十七。个位五减七不够，借一变成十五减七等于八。十位八借了一剩七，七减五等于二。答案二十八。' },
+                // 乘法口诀
+                { type: '乘法口诀', q: '6 × 7 = ?', a: '42', steps: '口诀：六七四十二', speak: '六乘以七等于多少？口诀：六七四十二！答案四十二。' },
+                { type: '乘法口诀', q: '8 × 9 = ?', a: '72', steps: '口诀：八九七十二', speak: '八乘以九等于多少？口诀：八九七十二！答案七十二。' },
+                { type: '乘法口诀', q: '5 × 8 = ?', a: '40', steps: '口诀：五八四十', speak: '五乘以八等于多少？口诀：五八四十！答案四十。' },
+                { type: '乘法口诀', q: '4 × 9 = ?', a: '36', steps: '口诀：四九三十六', speak: '四乘以九等于多少？口诀：四九三十六！答案三十六。' },
+                { type: '乘法口诀', q: '7 × 6 = ?', a: '42', steps: '口诀：六七四十二', speak: '七乘以六等于多少？口诀：六七四十二！答案四十二。' },
+                { type: '乘法口诀', q: '9 × 5 = ?', a: '45', steps: '口诀：五九四十五', speak: '九乘以五等于多少？口诀：五九四十五！答案四十五。' },
+                // 除法计算
+                { type: '除法计算', q: '56 ÷ 7 = ?', a: '8', steps: '口诀：七八五十六 → 56÷7=8', speak: '五十六除以七等于多少？口诀：七八五十六。答案八。' },
+                { type: '除法计算', q: '48 ÷ 6 = ?', a: '8', steps: '口诀：六八四十八 → 48÷6=8', speak: '四十八除以六等于多少？口诀：六八四十八。答案八。' },
+                { type: '除法计算', q: '35 ÷ 5 = ?', a: '7', steps: '口诀：五七三十五 → 35÷5=7', speak: '三十五除以五等于多少？口诀：五七三十五。答案七。' },
+                { type: '除法计算', q: '63 ÷ 9 = ?', a: '7', steps: '口诀：七九六十三 → 63÷9=7', speak: '六十三除以九等于多少？口诀：七九六十三。答案七。' },
+                { type: '除法计算', q: '72 ÷ 8 = ?', a: '9', steps: '口诀：八九七十二 → 72÷8=9', speak: '七十二除以八等于多少？口诀：八九七十二。答案九。' },
+                { type: '除法计算', q: '24 ÷ 4 = ?', a: '6', steps: '口诀：四六二十四 → 24÷4=6', speak: '二十四除以四等于多少？口诀：四六二十四。答案六。' },
+                // 应用题
+                { type: '应用题', q: '小明有45个苹果，送给小红18个，还剩多少个？', a: '27', steps: '45 - 18 = 27', speak: '小明有四十五个苹果，送给小红十八个，还剩多少个？四十五减十八等于二十七。答：还剩二十七个苹果。' },
+                { type: '应用题', q: '一盒蜡笔有6支，7盒共有多少支？', a: '42', steps: '6 × 7 = 42', speak: '一盒蜡笔有六支，七盒共有多少支？六乘以七等于四十二。答：共有四十二支蜡笔。' },
+                { type: '应用题', q: '36颗糖平均分给4个小朋友，每人几颗？', a: '9', steps: '36 ÷ 4 = 9', speak: '三十六颗糖平均分给四个小朋友，每人几颗？三十六除以四等于九。答：每人九颗。' },
+                { type: '应用题', q: '小红有32元，买文具用去15元，还剩多少元？', a: '17', steps: '32 - 15 = 17', speak: '小红有三十二元，买文具用去十五元，还剩多少元？三十二减十五等于十七。答：还剩十七元。' },
+                { type: '应用题', q: '一箱牛奶有8盒，5箱共有多少盒？', a: '40', steps: '8 × 5 = 40', speak: '一箱牛奶有八盒，五箱共有多少盒？八乘以五等于四十。答：共有四十盒。' },
+                // 周长计算
+                { type: '周长', q: '长方形长8cm，宽5cm，周长多少？', a: '26cm', steps: '(8+5)×2 = 26', speak: '长方形长八厘米，宽五厘米。周长公式是长加宽乘以二。八加五等于十三，十三乘以二等于二十六。周长是二十六厘米。' },
+                { type: '周长', q: '长方形长12cm，宽6cm，周长多少？', a: '36cm', steps: '(12+6)×2 = 36', speak: '长方形长十二厘米，宽六厘米。十二加六等于十八，十八乘以二等于三十六。周长是三十六厘米。' },
+                { type: '周长', q: '正方形边长7cm，周长多少？', a: '28cm', steps: '7×4 = 28', speak: '正方形边长七厘米。周长是边长乘以四。七乘以四等于二十八。周长是二十八厘米。' },
+                { type: '周长', q: '正方形边长9cm，周长多少？', a: '36cm', steps: '9×4 = 36', speak: '正方形边长九厘米。九乘以四等于三十六。周长是三十六厘米。' },
+                { type: '周长', q: '长方形长10cm，宽4cm，周长多少？', a: '28cm', steps: '(10+4)×2 = 28', speak: '长方形长十厘米，宽四厘米。十加四等于十四，十四乘以二等于二十八。周长是二十八厘米。' },
+            ];
+
+            // --- 题库：三上（三年级上学期）---
+            const BANK_G3S1 = [
+                { type: '万以内加减', q: '1250 + 3680 = ?', a: '4930', steps: '1250+3680=4930', speak: '一千二百五十加三千六百八十。个位零加零等于零。十位五加八等于十三，写三进一。百位二加六再加一等于九。千位一加三等于四。答案四千九百三十。' },
+                { type: '万以内加减', q: '5000 - 2376 = ?', a: '2624', steps: '5000-2376=2624', speak: '五千减两千三百七十六。从个位开始减，零减六不够，借位。最后算出来等于两千六百二十四。' },
+                { type: '多位数乘一位数', q: '213 × 4 = ?', a: '852', steps: '3×4=12, 1×4+1=5, 2×4=8', speak: '二百一十三乘以四。个位三乘四等于十二，写二进一。十位一乘四加一等于五。百位二乘四等于八。答案八百五十二。' },
+                { type: '多位数乘一位数', q: '308 × 6 = ?', a: '1848', steps: '8×6=48, 0×6+4=4, 3×6=18', speak: '三百零八乘以六。个位八乘六等于四十八，写八进四。十位零乘六加四等于四。百位三乘六等于十八。答案一千八百四十八。' },
+                { type: '多位数乘一位数', q: '425 × 3 = ?', a: '1275', steps: '5×3=15, 2×3+1=7, 4×3=12', speak: '四百二十五乘以三。个位五乘三等于十五，写五进一。十位二乘三加一等于七。百位四乘三等于十二。答案一千二百七十五。' },
+                { type: '分数初步', q: '1/3 和 1/4 哪个大？', a: '1/3', steps: '分子相同，分母越小分数越大', speak: '三分之一和四分之一哪个更大？分子相同的时候，分母越小分数越大。三比四小，所以三分之一大于四分之一。' },
+                { type: '分数初步', q: '2/5 + 1/5 = ?', a: '3/5', steps: '同分母分数相加，分子相加', speak: '五分之二加五分之一。同分母分数相加，分母不变，分子相加。二加一等于三。答案是五分之三。' },
+                { type: '分数初步', q: '3/8 - 1/8 = ?', a: '2/8 = 1/4', steps: '同分母分数相减，分子相减', speak: '八分之三减八分之一。同分母分数相减，分母不变，分子相减。三减一等于二。八分之二约分后等于四分之一。' },
+                { type: '长度单位', q: '3米 = ? 厘米', a: '300', steps: '1米=100厘米，3米=300厘米', speak: '三米等于多少厘米？一米等于一百厘米，三米就是三百厘米。' },
+                { type: '长度单位', q: '5千米 = ? 米', a: '5000', steps: '1千米=1000米', speak: '五千米等于多少米？一千米等于一千米，五千米就是五千米，即五千米等于五千米。' },
+            ];
+
+            // --- 题库：三奥（三年级奥数思维）---
+            const BANK_G3O = [
+                { type: '找规律', q: '1, 3, 5, 7, ?, 11', a: '9', steps: '奇数数列，每次+2', speak: '找规律填空：一、三、五、七、问、十一。这是奇数数列，每次加二。七加二等于九。答案是九。' },
+                { type: '找规律', q: '2, 4, 8, 16, ?, 64', a: '32', steps: '等比数列，每次×2', speak: '找规律填空：二、四、八、十六、问号、六十四。这是等比数列，每次乘以二。十六乘以二等于三十二。答案是三十二。' },
+                { type: '找规律', q: '1, 1, 2, 3, 5, 8, ?', a: '13', steps: '斐波那契数列，前两项之和', speak: '找规律填空：一、一、二、三、五、八、问号。这是斐波那契数列，每个数是前两个数之和。五加八等于十三。答案是十三。' },
+                { type: '找规律', q: '3, 6, 9, 12, ?, 18', a: '15', steps: '等差数列，每次+3', speak: '找规律填空：三、六、九、十二、问号、十八。每次加三。十二加三等于十五。答案是十五。' },
+                { type: '鸡兔同笼', q: '鸡兔共10只，脚28只，鸡兔各几只？', a: '鸡6只，兔4只', steps: '假设全是鸡：10×2=20只脚。多28-20=8只脚。每只兔比鸡多2只脚。8÷2=4只兔。10-4=6只鸡。', speak: '鸡和兔共十只，脚二十八只。假设全是鸡的话，十只鸡有二十只脚。比二十八只脚少了八只。每只兔比鸡多两只脚。八除以二等于四只兔子。十减四等于六只鸡。答案是六只鸡、四只兔子。' },
+                { type: '鸡兔同笼', q: '鸡兔共8只，脚22只，鸡兔各几只？', a: '鸡5只，兔3只', steps: '假设全是鸡：8×2=16。多22-16=6。6÷2=3只兔。8-3=5只鸡。', speak: '鸡和兔共八只，脚二十二只。假设全是鸡，十六只脚，差六只。六除以二等于三只兔子。八减三等于五只鸡。答案是五只鸡、三只兔子。' },
+                { type: '和差倍', q: '甲乙两数和为30，甲是乙的2倍，甲乙各是多少？', a: '甲20，乙10', steps: '乙=30÷(2+1)=10，甲=10×2=20', speak: '甲乙两数的和是三十，甲是乙的两倍。把乙看一份，甲就是两份，总共三份。三十除以三等于十，乙是十。甲是十的两倍等于二十。答案是甲二十，乙十。' },
+                { type: '和差倍', q: '甲乙两数差为12，甲是乙的3倍，甲乙各是多少？', a: '甲18，乙6', steps: '乙=12÷(3-1)=6，甲=6×3=18', speak: '甲乙两数的差是十二，甲是乙的三倍。甲比乙多了两份，对应差值十二。十二除以二等于六，乙是六。甲是六的三倍等于十八。答案是甲十八，乙六。' },
+                { type: '植树问题', q: '一条路长100米，每隔5米种一棵树（两端都种），共种几棵？', a: '21棵', steps: '100÷5=20段，两端都种：20+1=21棵', speak: '一条路长一百米，每隔五米种一棵树，两端都种。一百除以五等于二十段。两端都种的话要加一。二十加一等于二十一棵。答案是二十一棵。' },
+                { type: '植树问题', q: '跑道一圈400米，每隔10米插一面旗，共几面？', a: '40面', steps: '环形：400÷10=40面', speak: '跑道一圈四百米，每隔十米插一面旗。环形跑道不需要加一。四百除以十等于四十面。答案是四十面。' },
+                { type: '逻辑推理', q: '小红比小明高，小明比小华高，谁最矮？', a: '小华', steps: '小红>小明>小华，所以小华最矮', speak: '小红比小明高，小明比小华高。所以小红最高，小明中等，小华最矮。答案是小华。' },
+                { type: '逻辑推理', q: 'A、B、C三人，A说"B最矮"，B说"C最高"，C说"A不是最高"。只有一人说真话，谁最高？', a: 'B', steps: '推理：假设A真→B最矮，B说C最高→假，C说A不是最高→真（矛盾，两人说真话）。假设B真→C最高，A说B最矮→假，C说A不是最高→假→A最高（矛盾）。假设C真→A不是最高，A说B最矮→假，B说C最高→假→A最高。', speak: '这是一个逻辑推理题。A说B最矮，B说C最高，C说A不是最高。只有一人说真话。经过推理，可以得出B是最高的。' },
+                { type: '年龄问题', q: '爸爸今年36岁，小明今年8岁，几年后爸爸年龄是小明的3倍？', a: '6年后', steps: '设x年后：36+x=3×(8+x)→36+x=24+3x→12=2x→x=6', speak: '爸爸三十六岁，小明八岁。设x年后爸爸年龄是小明的三倍。三十六加x等于三倍的八加x。解方程得x等于六。六年后爸爸四十二岁，小明十四岁，正好三倍。答案是六年后。' },
+            ];
+
+            // --- 伪随机数生成器（用日期做种子，保证同一天选的题目一致）---
+            function seededRandom(seed) {
+                let s = seed;
+                return function() {
+                    s = (s * 16807 + 0) % 2147483647;
+                    return (s - 1) / 2147483646;
+                };
+            }
+
+            // --- 从题库中按种子选择 N 道不重复题目 ---
+            function pickFromBank(bank, count, rng) {
+                const indices = Array.from({ length: bank.length }, (_, i) => i);
+                // Fisher-Yates shuffle
+                for (let i = indices.length - 1; i > 0; i--) {
+                    const j = Math.floor(rng() * (i + 1));
+                    [indices[i], indices[j]] = [indices[j], indices[i]];
+                }
+                return indices.slice(0, count).map(i => ({ ...bank[i] }));
+            }
+
+            // --- 获取某天的题目（dateOffset: 0=今天, -1=昨天, ...）---
+            function getDayProblems(dateOffset) {
+                const today = new Date();
+                const target = new Date(today);
+                target.setDate(today.getDate() + dateOffset);
+                const seed = target.getFullYear() * 10000 + (target.getMonth() + 1) * 100 + target.getDate();
+                const rng = seededRandom(seed);
+    
+                const g2 = pickFromBank(BANK_G2S2, 3, rng);
+                const g3 = pickFromBank(BANK_G3S1, 1, rng);
+                const o = pickFromBank(BANK_G3O, 1, rng);
+    
+                return [
+                    ...g2.map(p => ({ ...p, grade: '二下' })),
+                    ...g3.map(p => ({ ...p, grade: '三上' })),
+                    ...o.map(p => ({ ...p, grade: '三奥' }))
+                ];
+            }
+
+            // --- 格式化日期显示 ---
+            function formatDate(offset) {
+                const today = new Date();
+                const d = new Date(today);
+                d.setDate(today.getDate() + offset);
+                const labels = ['今天', '昨天', '前天', '3天前', '4天前', '5天前', '6天前'];
+                const dayName = labels[-offset] || `${-offset}天前`;
+                const month = d.getMonth() + 1;
+                const day = d.getDate();
+                return { label: `${month}/${day} (${dayName})`, offset };
+            }
+
+            // --- 渲染数学列表 ---
+            let currentMathDayOffset = 0; // 当前查看的日期偏移
+
+            // === 数学题库数据 ===
+            const MATH_DATA = {};
+            const TODAY = new Date();
             
-            window.triggerMode = (mode) => {
+            // 基础题库 (深圳市小学三年级)
+            const SCHOOL_Q = [
+                { title: "三位数加减法", q: "245 + 178 = ?", a: "423", drawQ: () => { SVGBoard.drawText(200,60,"245 + 178 = ?",24,"#666"); SVGBoard.drawText(200,120,"  245",28,"#0088aa"); SVGBoard.drawText(200,160,"+ 178",28,"#ffa500"); SVGBoard.drawLine(130,180,270,180,"#666",2); }, drawA: () => { SVGBoard.drawText(200,220,"= 423",28,"#00cc66"); } },
+                { title: "长方形周长", q: "长 12cm，宽 8cm，周长是多少？", a: "40cm", drawQ: () => { SVGBoard.drawRectangle(140,80,120,80,"#0088aa",2); SVGBoard.drawText(200,70,"长 12cm",14,"#ffa500"); SVGBoard.drawText(120,130,"宽8cm",14,"#ffa500"); SVGBoard.drawText(200,220,"周长 = (长+宽)×2",18,"#666"); }, drawA: () => { SVGBoard.drawText(200,260,"= (12+8)×2 = 40cm",20,"#00cc66"); } },
+                { title: "倍数应用题", q: "小明有12颗糖，小红是小明的3倍，小红有多少颗？", a: "36颗", drawQ: () => { SVGBoard.drawText(200,60,"小明: 12 颗",20,"#0088aa"); SVGBoard.drawText(200,100,"小红: 小明的 3 倍",20,"#666"); SVGBoard.drawText(200,150,"12 × 3 = ?",24,"#ffa500"); }, drawA: () => { SVGBoard.drawText(200,220,"= 36 (颗)",24,"#00cc66"); } },
+                { title: "分数认识", q: "把一个圆平均分成4份，每份是它的几分之几？", a: "1/4", drawQ: () => { SVGBoard.drawCircle(200,130,60,"#666",2); SVGBoard.drawLine(200,70,200,190,"#ffa500",2); SVGBoard.drawLine(140,130,260,130,"#ffa500",2); SVGBoard.drawText(160,110,"1/4",24,"#0088aa"); }, drawA: () => { SVGBoard.drawText(200,240,"每份是它的 四分之一",20,"#00cc66"); } },
+                { title: "时间计算", q: "现在是 3:10，经过 30 分钟是几点？", a: "3:40", drawQ: () => { SVGBoard.drawCircle(200,120,50,"#666",2); SVGBoard.drawLine(200,120,200,90,"#0088aa",2); SVGBoard.drawLine(200,120,230,130,"#ffa500",2); SVGBoard.drawText(200,60,"3:10",24,"#0088aa"); }, drawA: () => { SVGBoard.drawText(200,220,"经过 30 分钟",18,"#666"); SVGBoard.drawText(200,260,"3:40",28,"#00cc66"); } },
+                { title: "重量换算", q: "3千克 = ? 克", a: "3000克", drawQ: () => { SVGBoard.drawText(200,80,"1 千克 = 1000 克",22,"#666"); SVGBoard.drawText(200,140,"3 千克 = ?",28,"#0088aa"); }, drawA: () => { SVGBoard.drawText(200,220,"3 × 1000 = 3000",20,"#ffa500"); SVGBoard.drawText(200,260,"= 3000 克",20,"#00cc66"); } }
+            ];
+            // 奥数题库
+            const OLY_Q = [
+                { title: "鸡兔同笼", q: "头10个，脚28只，鸡和兔各几只？", a: "鸡6只，兔4只", drawQ: () => { SVGBoard.drawText(200,60,"头: 10个  脚: 28只",18,"#ffa500"); SVGBoard.drawText(200,110,"假设全是鸡: 10×2=20脚",16,"#666"); SVGBoard.drawText(200,160,"多出: 28-20=8脚",16,"#666"); }, drawA: () => { SVGBoard.drawText(200,220,"兔: 8÷2 = 4只",18,"#ffa500"); SVGBoard.drawText(200,260,"鸡: 10-4 = 6只",18,"#00cc66"); } },
+                { title: "找规律", q: "2, 5, 10, 17, ? 下一个是多少？", a: "26", drawQ: () => { SVGBoard.drawText(200,60,"2, 5, 10, 17, ?",24,"#666"); SVGBoard.drawText(200,120,"相邻差:",16,"#ffa500"); SVGBoard.drawText(140,160,"3, 5, 7, 9, ...",20,"#0088aa"); }, drawA: () => { SVGBoard.drawText(200,220,"下一个差是 9",18,"#666"); SVGBoard.drawText(200,260,"17 + 9 = 26",24,"#00cc66"); } },
+                { title: "植树问题", q: "路长100米，每5米种一棵（两端都种），共几棵？", a: "21棵", drawQ: () => { SVGBoard.drawLine(80,100,320,100,"#666",2); for(let i=0;i<6;i++){SVGBoard.drawCircle(80+i*48,100,5,"#0088aa");} SVGBoard.drawText(200,150,"间隔数: 100÷5 = 20",18,"#ffa500"); }, drawA: () => { SVGBoard.drawText(200,220,"两端都种: 棵数=间隔数+1",16,"#666"); SVGBoard.drawText(200,260,"20 + 1 = 21棵",22,"#00cc66"); } }
+            ];
+            // 思维题库
+            const THINK_Q = [
+                { title: "火柴棒", q: "移动1根火柴使 6+4=4 成立", a: "0+4=4", drawQ: () => { SVGBoard.drawText(200,60,"6 + 4 = 4",28,"#666"); SVGBoard.drawText(200,110,"移动 1 根火柴...",20,"#ffa500"); }, drawA: () => { SVGBoard.drawText(200,220,"变成: 0 + 4 = 4",28,"#00cc66"); } },
+                { title: "逻辑推理", q: "A说B在说谎，B说C在说谎，C说AB都在说谎。谁说真话？", a: "B", drawQ: () => { SVGBoard.drawText(200,60,"A: B说谎",16,"#666"); SVGBoard.drawText(200,100,"B: C说谎",16,"#666"); SVGBoard.drawText(200,140,"C: AB都说谎",16,"#666"); }, drawA: () => { SVGBoard.drawText(200,220,"假设A真->B假->C真->矛盾",16,"#ffa500"); SVGBoard.drawText(200,260,"只有B说真话!",20,"#00cc66"); } },
+                { title: "逆向思维", q: "一个数+5，x2，-6=20，求这个数。", a: "8", drawQ: () => { SVGBoard.drawText(200,80,"? + 5 -> x2 -> -6 = 20",18,"#666"); SVGBoard.drawText(200,140,"倒推...",18,"#ffa500"); }, drawA: () => { SVGBoard.drawText(200,200,"20+6=26 -> 26/2=13 -> 13-5=8",18,"#0088aa"); SVGBoard.drawText(200,260,"答案是: 8",24,"#00cc66"); } }
+            ];
+
+            // 生成7天数据
+            for (let d = 0; d < 7; d++) {
+                const date = new Date(TODAY);
+                date.setDate(date.getDate() - d);
+                const ds = date.toISOString().split('T')[0];
+                MATH_DATA[d] = {
+                    date: ds,
+                    label: d === 0 ? '今天' : d === 1 ? '昨天' : ds.slice(5),
+                    questions: [
+                        { type: 'school', ...SCHOOL_Q[d % SCHOOL_Q.length], speech: `这是第${d+1}天的第一题，${SCHOOL_Q[d%SCHOOL_Q.length].title}。题目是${SCHOOL_Q[d%SCHOOL_Q.length].q}。答案是${SCHOOL_Q[d%SCHOOL_Q.length].a}。` },
+                        { type: 'school', ...SCHOOL_Q[(d+1) % SCHOOL_Q.length], speech: `第二题，${SCHOOL_Q[(d+1)%SCHOOL_Q.length].title}。题目是${SCHOOL_Q[(d+1)%SCHOOL_Q.length].q}。答案是${SCHOOL_Q[(d+1)%SCHOOL_Q.length].a}。` },
+                        { type: 'school', ...SCHOOL_Q[(d+2) % SCHOOL_Q.length], speech: `第三题，${SCHOOL_Q[(d+2)%SCHOOL_Q.length].title}。题目是${SCHOOL_Q[(d+2)%SCHOOL_Q.length].q}。答案是${SCHOOL_Q[(d+2)%SCHOOL_Q.length].a}。` },
+                        { type: 'olympic', ...OLY_Q[d % OLY_Q.length], speech: `第四题奥数题，${OLY_Q[d%OLY_Q.length].title}。题目是${OLY_Q[d%OLY_Q.length].q}。答案是${OLY_Q[d%OLY_Q.length].a}。` },
+                        { type: 'thinking', ...THINK_Q[d % THINK_Q.length], speech: `第五题思维题，${THINK_Q[d%THINK_Q.length].title}。题目是${THINK_Q[d%THINK_Q.length].q}。答案是${THINK_Q[d%THINK_Q.length].a}。` }
+                    ]
+                };
+            }
+
+            let mathCurrentDay = 0, mathCurrentQ = null;
+
+            window.triggerMathMode = () => {
+                // UI 切换
+                document.getElementById('math-overlay').style.display = 'block';
+                document.getElementById('blackboard').style.display = 'none';
+                document.getElementById('math-controls').style.display = 'none';
+                document.getElementById('math-question-list').style.display = 'none';
+                
+                // 渲染日期列表
+                const list = document.getElementById('math-day-list');
+                list.innerHTML = '';
+                list.style.display = 'grid';
+                
+                for (let i = 0; i < 7; i++) {
+                    const btn = document.createElement('button');
+                    btn.style.cssText = `padding:15px; background:${i===0?'#0088aa':'#fff'}; color:${i===0?'#fff':'#333'}; border:1px solid #ddd; border-radius:8px; font-size:16px; font-weight:bold; cursor:pointer;`;
+                    btn.innerHTML = `${MATH_DATA[i].label}<br><span style="font-size:11px; opacity:0.8; font-weight:normal;">${MATH_DATA[i].date}</span>`;
+                    btn.onclick = () => showMathQuestions(i);
+                    list.appendChild(btn);
+                }
+            };
+
+            window.showMathQuestions = (dayIdx) => {
+                mathCurrentDay = dayIdx;
+                document.getElementById('math-day-list').style.display = 'none';
+                document.getElementById('math-question-list').style.display = 'block';
+                document.getElementById('math-current-day-title').textContent = `${MATH_DATA[dayIdx].label} (${MATH_DATA[dayIdx].date})`;
+                
+                const list = document.getElementById('math-question-items');
+                list.innerHTML = '';
+                
+                const colors = { school: '#0088aa', olympic: '#ffa500', thinking: '#00cc66' };
+                const labels = { school: '基础', olympic: '奥数', thinking: '思维' };
+                
+                MATH_DATA[dayIdx].questions.forEach((q, i) => {
+                    const item = document.createElement('div');
+                    item.style.cssText = `background:#fff; padding:12px; margin-bottom:10px; border-radius:8px; border-left:4px solid ${colors[q.type]}; cursor:pointer; box-shadow:0 2px 5px rgba(0,0,0,0.05);`;
+                    item.innerHTML = `<span style="font-size:11px; color:${colors[q.type]}; background:rgba(0,0,0,0.05); padding:2px 6px; border-radius:4px; margin-right:8px;">${labels[q.type]}</span><span style="font-weight:bold; color:#333;">${q.title}</span>`;
+                    item.onclick = () => showMathQuestion(q);
+                    list.appendChild(item);
+                });
+            };
+
+            window.showMathQuestion = (q) => {
+                mathCurrentQ = q;
+                document.getElementById('math-overlay').style.display = 'none';
+                document.getElementById('blackboard').style.display = 'block';
+                document.getElementById('math-controls').style.display = 'block';
+                
+                SVGBoard.clear();
+                q.drawQ(); // 仅显示题目
+                
+                const btn = document.getElementById('btn-math-explain');
+                btn.innerText = `🔊 讲解: ${q.title}`;
+            };
+
+            window.startMathExplanation = async () => {
+                if (!mathCurrentQ) return;
+                document.getElementById('btn-math-explain').disabled = true;
+                document.getElementById('btn-math-explain').innerText = '⏳ 讲解中...';
+                
+                // 1. 播放语音
+                await speak(mathCurrentQ.speech);
+                
+                // 2. 显示答案 (在语音播放过程中或之后)
+                // 这里简化为语音播放完后显示答案，或者可以边讲边画
+                mathCurrentQ.drawA();
+                
+                document.getElementById('btn-math-explain').disabled = false;
+                document.getElementById('btn-math-explain').innerText = `🔊 重新讲解: ${mathCurrentQ.title}`;
+            };
+
+            window.mathBackToDays = () => {
+                document.getElementById('math-question-list').style.display = 'none';
+                document.getElementById('math-day-list').style.display = 'grid';
+            };
+
+            window.mathBackToList = () => {
+                mathCurrentQ = null;
+                SVGBoard.clear();
+                document.getElementById('math-controls').style.display = 'none';
+                document.getElementById('math-overlay').style.display = 'block';
+                document.getElementById('blackboard').style.display = 'none';
+            };
+
+            window.switchMode = (mode) => {
                 console.log('切换模式:', mode);
                 
-                // 如果点击的是当前已激活的模式，则关闭
+                if (modeSwitching) return;
+                modeSwitching = true;
+
                 if (currentMode === mode) {
                     currentMode = null;
+                    document.getElementById('voice-text').innerText = "按住说话";
+                    document.getElementById('voice-icon').innerText = "🎤";
                     showChat(mode === 'math' ? '📐 数学辅导模式已关闭' : '📝 博客演讲模式已关闭', 'ai');
-                    toggleBoard(false);
+                    if (mode === 'math') {
+                        currentMathPlaying = null;
+                    } else if (mode === 'blog') {
+                        currentBlogPlaying = null;
+                        if (blogReturnListener) {
+                            window.removeEventListener('click', blogReturnListener);
+                            blogReturnListener = null;
+                        }
+                    }
+                    document.getElementById('blog-list-overlay').style.display = 'none';
+                    document.getElementById('blackboard-container').style.display = 'none';
+                    document.querySelector('.mode-switcher').style.display = '';
+                    if (typeof SVGBoard !== 'undefined') SVGBoard.clear();
+                    
+                    toggleBoard(false); // 还原人物位置
                     setState(STATES.IDLE);
-                    // 更新按钮高亮
                     document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+                    modeSwitching = false; // 释放锁
                     return;
                 }
                 
@@ -718,27 +1653,19 @@
                 
                 if (mode === 'math') {
                     currentMode = 'math';
+                    document.getElementById('voice-text').innerText = "演讲中······";
                     showChat('📐 数学辅导模式已激活', 'ai');
-                    setState(STATES.TEACHING);
                     toggleBoard(true);
-                    // 高亮对应按钮
                     document.querySelectorAll('.mode-btn')[0].classList.add('active');
                     
-                    // 添加数学演示内容并开始讲解
-                    setTimeout(async () => {
-                        drawSVGAction('write_text', { x: 200, y: 40, text: '勾股定理', size: 28, color: '#00f2ff' });
-                        drawSVGAction('draw_triangle', { x1: 150, y1: 80, x2: 150, y2: 200, x3: 250, y3: 200, color: '#ffd700' });
-                        drawSVGAction('write_text', { x: 120, y: 150, text: 'a', size: 20, color: '#fff' });
-                        drawSVGAction('write_text', { x: 200, y: 230, text: 'b', size: 20, color: '#fff' });
-                        drawSVGAction('write_text', { x: 220, y: 140, text: 'c', size: 20, color: '#fff' });
-                        drawSVGAction('write_text', { x: 200, y: 260, text: 'a² + b² = c²', size: 22, color: '#00ff88' });
-                        
-                        // 开始语音讲解
-                        await speak("大家好，这是勾股定理。在直角三角形中，两条直角边的平方和等于斜边的平方，也就是 a 方加 b 方等于 c 方。");
+                    setTimeout(() => {
+                        triggerMathMode();
                     }, 300);
                 } else if (mode === 'blog') {
                     currentMode = 'blog';
-                    showChat('📝 博客演讲模式已激活，正在加载列表...', 'ai');
+                    document.getElementById('voice-text').innerText = "演讲中······";
+                    document.getElementById('voice-icon').innerText = "🔊";
+                    showChat('📝 博客演讲模式已激活', 'ai');
                     setState(STATES.TEACHING); // Use TEACHING to show blackboard
                     toggleBoard(true);
                     // 高亮对应按钮
@@ -746,7 +1673,15 @@
                     
                     // 隐藏 SVG，显示 HTML 列表
                     document.getElementById('blackboard').style.display = 'none';
+                    document.getElementById('blackboard-container').style.display = '';
                     document.getElementById('blog-list-overlay').style.display = 'block';
+                    
+                    // 重置标题
+                    const titleEl = document.getElementById('blog-list-items').previousElementSibling;
+                    if (titleEl) {
+                        titleEl.innerHTML = '📝 最新博客';
+                        titleEl.style.display = 'block';
+                    }
                     
                     // 清空旧列表
                     const listContainer = document.getElementById('blog-list-items');
@@ -764,24 +1699,104 @@
                             const item = document.createElement('div');
                             item.className = 'blog-item';
                             item.innerHTML = `
-                                <div class="blog-title">${index + 1}. ${blog.title}</div>
+                                <div class="blog-title">
+                                    <span>${index + 1}. ${blog.title}</span>
+                                    <button class="blog-btn" id="read-btn-${index}">🔊</button>
+                                </div>
                                 <div class="blog-date">${blog.date}</div>
-                                <button class="blog-btn" id="read-btn-${index}">🔊 朗读原文</button>
                             `;
                             listContainer.appendChild(item);
-                            
-                            // 绑定朗读事件
-                            document.getElementById(`read-btn-${index}`).onclick = (e) => {
+                        });
+                        
+                        // 博客朗读互斥 + 字幕显示（复用列表背景框）
+                        blogs.forEach((blog, index) => {
+                            document.getElementById(`read-btn-${index}`).onclick = async (e) => {
                                 e.stopPropagation();
-                                speak(blog.summary);
+                                if (currentBlogPlaying !== null) return;
+                                
+                                currentBlogPlaying = index;
+                                
+const fullContent = blog.content || blog.body || blog.summary;
+const cleanText = stripMarkdown(fullContent);
+const ttsText = stripEmojis(cleanText);
+                                
+                                // 隐藏喇叭按钮，标记当前朗读项
+                                document.getElementById(`read-btn-${index}`).style.display = 'none';
+                                document.getElementById(`read-btn-${index}`).parentElement?.parentElement?.classList.add('active');
+                                
+                                // 在列表框内显示讲解内容 + "讲解中···"
+                                const listContainer = document.getElementById('blog-list-items');
+                                const originalContent = listContainer.innerHTML;
+                                
+                                // 隐藏标题，让讲解内容占满空间
+                                const titleEl = listContainer.previousElementSibling;
+                                if (titleEl) titleEl.style.display = 'none';
+                                
+                                listContainer.innerHTML = `
+                                    <div id="blog-playing-card" style="background:#ffffff; border:1px solid rgba(0,0,0,0.08); border-left:3px solid #0088aa; border-radius:18px; padding:14px 20px; margin-bottom:10px; max-height:calc(100vh - 300px); overflow-y:auto; box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+                                        <div id="blog-playing-title" style="color:#0088aa; font-size:14px; font-weight:bold; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid rgba(0,0,0,0.08);"></div>
+                                        <div id="blog-playing-text" style="color:#1a1a2e; font-size:13px; line-height:1.7; margin-bottom:12px;"></div>
+                                        <div id="speaking-status" style="color:#0088aa; font-size:12px; text-align:center; padding:8px 0; border-top:1px solid rgba(0,0,0,0.06);">
+                                            <span style="display:inline-block; width:6px; height:6px; background:#0088aa; border-radius:50%; margin-right:6px; animation:pulse-blue 1s infinite;"></span>
+                                            <span id="speaking-status-text">博客演讲已激活</span>
+                                        </div>
+                                    </div>
+                                `;
+                                
+                                // 填充标题
+                                document.getElementById('blog-playing-title').textContent = `📖 ${blog.title}`;
+                                
+                                // 填充文字（打字机效果）
+                                const textEl = document.getElementById('blog-playing-text');
+                                let charIdx = 0;
+                                const typeInterval = setInterval(() => {
+                                    if (charIdx < cleanText.length) {
+                                        textEl.textContent += cleanText[charIdx];
+                                        charIdx++;
+                                    } else {
+                                        clearInterval(typeInterval);
+                                    }
+                                }, 30);
+                                
+                                // 隐藏其他博客项
+                                document.querySelectorAll('.blog-item').forEach((item, i) => {
+                                    if (i !== index) item.style.opacity = '0.4';
+                                });
+                                
+                                const thisBlog = index;
+                                await speak(ttsText); // 使用过滤表情符号的文本
+                                
+                                // 朗读结束：更新状态为"讲解完毕"
+                                const statusText = document.getElementById('speaking-status-text');
+                                const statusDot = document.querySelector('#speaking-status span');
+                                if (statusText) statusText.textContent = '讲解完毕 ✓';
+                                if (statusDot) { statusDot.style.background = '#4ade80'; statusDot.style.animation = 'none'; }
+                                
+                                await new Promise(r => setTimeout(r, 1200)); // 停留1.2秒让用户看到完毕提示
+                                
+                                // 朗读结束：恢复
+                                // 朗读结束：恢复
+                                if (currentBlogPlaying === thisBlog) {
+                                    currentBlogPlaying = null;
+                                    if (titleEl) titleEl.style.display = '';
+                                    listContainer.innerHTML = originalContent;
+                                    document.querySelectorAll('.blog-item').forEach(item => item.style.opacity = '1');
+                                    blogs.forEach((b, idx) => {
+                                        const btn = document.getElementById(`read-btn-${idx}`);
+                                        if (btn) btn.style.display = '';
+                                    });
+                                }
                             };
                         });
                     }).catch(err => {
                         listContainer.innerHTML = '<div style="color:red;text-align:center;">加载失败</div>';
                     });
+                    modeSwitching = false; // 释放锁
                 }
             };
             
+            window.triggerMode = (mode) => window.switchMode(mode);
+
             // 版本号点击切换日志显示
             const versionTag = document.getElementById('version-tag');
             if (versionTag) {
@@ -796,7 +1811,7 @@
                     }
                 };
             }
-        }
-    </script>
-</body>
-</html>
+            }
+        </script>
+    </body>
+    </html>
