@@ -65,6 +65,7 @@ class TTSHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-Type', 'audio/wav')
             self.send_header('Content-Length', str(len(wav_data)))
+            self.send_header('Connection', 'close')
             self.end_headers()
             self.wfile.write(wav_data)
             print(f"TTS: synthesized {len(text)} chars -> {duration[0]:.2f}s audio", flush=True)
@@ -74,10 +75,13 @@ class TTSHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == '/health':
+            body = json.dumps({"status": "ok", "model": "supertonic"}).encode()
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Connection', 'close')
             self.end_headers()
-            self.wfile.write(json.dumps({"status": "ok", "model": "supertonic"}).encode())
+            self.wfile.write(body)
         else:
             self.send_error(404, 'Not found')
 
