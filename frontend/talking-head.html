@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="build-id" content="20260611103409">
+        <meta name="build-id" content="20260611210324">
     <title>AI Digital Human - 全能讲师</title>
     <style>
         :root { --accent: #0088aa; --bg: #e8edf2; --panel-bg: rgba(0, 0, 0, 0.06); --board-bg: rgba(255, 255, 255, 0.95); }
@@ -310,7 +310,7 @@
 
     <div id="ui-layer">
         <div class="header-bar">
-            <div class="head"><span>AI</span> TEACHER <span id="version-tag" style="cursor:pointer; opacity:0.6; font-size:11px; font-weight:400; margin-left:8px;">v0.5.0</span></div>
+            <div class="head"><span>AI</span> TEACHER <span id="version-tag" style="cursor:pointer; opacity:0.6; font-size:11px; font-weight:400; margin-left:8px;">v0.4.84</span></div>
             <div id="status-pill"><span id="emotion-indicator">😊</span><div class="dot"></div><span id="status-text">IDLE</span></div>
         </div>
         
@@ -394,7 +394,7 @@
         (async () => {
             const dbg = document.getElementById('debug-log');
             dbg.innerHTML += 'Attempting Dynamic Imports...<br>';
-const cacheBuster = '?v=0.5.0-20260611103409';
+const cacheBuster = '?v=0.4.84-20260611210227';
             try {
                 const THREE = await import('https://47.107.172.201:8089/libs/three.esm.js' + cacheBuster);
                 dbg.innerHTML += 'Three Loaded.<br>';
@@ -665,7 +665,7 @@ const cacheBuster = '?v=0.5.0-20260611103409';
                     const { head, chest, lArm, rArm, rForeArm, lForeArm, lWrist, rWrist } = cachedBones;
 
                     let targetH = { x: 0, y: 0, z: 0 }; let targetC = { x: 0, y: 0, z: 0 };
-                    // Idle 待机姿态参数（由调试面板 v0.5.0 调优）
+                    // Idle 待机姿态参数（由调试面板 v0.4.83 调优）
                     let targetLA = { x: 0.0, y: 0.0, z: 1.45 };
                     let targetRA = { x: 0.0, y: 0.0, z: -1.45 };
                     let targetRFA = { x: 0.0, y: 0.0, z: 0 };  // rightLowerArm
@@ -1080,8 +1080,6 @@ const cacheBuster = '?v=0.5.0-20260611103409';
             // 兜底：使用 speechSynthesis
             function fallbackSpeak(text) {
                 return new Promise((resolve) => {
-                    const estDuration = text.length * 350;
-                    startSimulatedLipSync(estDuration);
                     const utterance = new SpeechSynthesisUtterance(text);
                     utterance.lang = 'zh-CN';
                     
@@ -1102,9 +1100,11 @@ const cacheBuster = '?v=0.5.0-20260611103409';
                         console.log('TTS fallback: Simulated Deep Male');
                     }
 
-                    // speechSynthesis 有 onStart 事件，用它来同步
+                    // 音频真正开始播放时才启动口型，确保声音/嘴形/动作完全同步
                     utterance.onstart = () => {
                         setState(STATES.SPEAKING);
+                        const estDuration = text.length * 350;
+                        startSimulatedLipSync(estDuration);
                         activateLipSync();
                     };
                     utterance.onend = () => { stopSimulatedLipSync(); setState(STATES.IDLE); resolve(); };
@@ -1117,6 +1117,7 @@ const cacheBuster = '?v=0.5.0-20260611103409';
             async function speak(text, signal = null) {
                 return new Promise(async (resolve) => {
                     if (!text) { resolve(); return; }
+                    if (!currentTaskActive) { resolve(); return; }
                     
                     // 进入思考状态，填补 TTS 请求延迟的空白
                     setState(STATES.THINKING);
@@ -1135,9 +1136,11 @@ const cacheBuster = '?v=0.5.0-20260611103409';
                             const blob = await resp.blob();
                             const url = URL.createObjectURL(blob);
                             const audio = new Audio(url);
+                            currentAudioElement = audio;
                             
                             // 音频开始播放时才启动口型和SPEAKING状态，确保声音/嘴形/动作完全同步
                             audio.onplaying = () => {
+                                if (!currentTaskActive) { audio.pause(); URL.revokeObjectURL(url); resolve(); return; }
                                 setState(STATES.SPEAKING);
                                 const dur = audio.duration > 0 ? audio.duration * 1000 : text.length * 350;
                                 startSimulatedLipSync(dur);
@@ -1145,12 +1148,14 @@ const cacheBuster = '?v=0.5.0-20260611103409';
                             };
                             
                             audio.onended = () => { 
+                                currentAudioElement = null;
                                 URL.revokeObjectURL(url); 
                                 stopSimulatedLipSync(); 
                                 setState(STATES.IDLE);
                                 resolve(); 
                             };
                             audio.onerror = () => { 
+                                currentAudioElement = null;
                                 URL.revokeObjectURL(url); 
                                 console.log('TTS audio error, falling back to speechSynthesis');
                                 fallbackSpeak(text).then(resolve); 
@@ -1167,6 +1172,21 @@ const cacheBuster = '?v=0.5.0-20260611103409';
                         fallbackSpeak(text).then(resolve);
                     }
                 });
+            }
+            
+            // 全局中止函数：停止所有正在进行的语音和讲解
+            function abortCurrentTask() {
+                currentTaskActive = false;
+                // 停止正在播放的 audio
+                if (currentAudioElement) {
+                    currentAudioElement.pause();
+                    currentAudioElement = null;
+                }
+                // 停止 speechSynthesis
+                speechSynthesis.cancel();
+                // 停止嘴型
+                stopSimulatedLipSync();
+                setState(STATES.IDLE);
             }
 
             // === 射线 & 拖拽 ===
@@ -1364,7 +1384,7 @@ const cacheBuster = '?v=0.5.0-20260611103409';
             let boardVisible = false;
             const SVGBoard = {
                 clear: () => { svgContent.innerHTML = ''; },
-                drawText: (x, y, text, size, color, align) => { const t = document.createElementNS(SVG_NS, 'text'); t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('font-size', size); t.setAttribute('fill', color || '#1a1a2e'); t.setAttribute('text-anchor', align || 'start'); t.setAttribute('font-weight', 'bold'); t.textContent = text; svgContent.appendChild(t); },
+                drawText: (x, y, text, size, color, align) => { const t = document.createElementNS(SVG_NS, 'text'); t.setAttribute('x', x); t.setAttribute('y', y); t.setAttribute('font-size', size); t.setAttribute('fill', color || '#1a1a2e'); t.setAttribute('text-anchor', align || 'middle'); t.setAttribute('font-weight', 'bold'); t.textContent = text; svgContent.appendChild(t); },
                 drawLine: (x1, y1, x2, y2, color, width, dashed) => { const l = document.createElementNS(SVG_NS, 'line'); l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2); l.setAttribute('stroke', color || '#0088aa'); l.setAttribute('stroke-width', width || 2); if (dashed) l.setAttribute('stroke-dasharray', '5,5'); svgContent.appendChild(l); },
                 drawRect: (x, y, w, h, fill, stroke, rx) => { const r = document.createElementNS(SVG_NS, 'rect'); r.setAttribute('x', x); r.setAttribute('y', y); r.setAttribute('width', w); r.setAttribute('height', h); r.setAttribute('fill', fill || 'none'); r.setAttribute('stroke', stroke || '#0088aa'); r.setAttribute('stroke-width', '2'); if (rx) r.setAttribute('rx', rx); svgContent.appendChild(r); },
                 drawCircle: (cx, cy, r, fill, stroke) => { const c = document.createElementNS(SVG_NS, 'circle'); c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', r); c.setAttribute('fill', fill || 'none'); c.setAttribute('stroke', stroke || '#0088aa'); c.setAttribute('stroke-width', '2'); svgContent.appendChild(c); }
@@ -1416,6 +1436,8 @@ const cacheBuster = '?v=0.5.0-20260611103409';
             let currentBlogPlaying = null; // 当前正在朗读的博客索引
             let blogReturnListener = null; // 博客返回监听器
             let modeSwitching = false; // 模式切换锁
+            let currentTaskActive = true; // 当前异步任务是否有效（用于中断讲解/朗读循环）
+            let currentAudioElement = null; // 当前正在播放的 audio 元素
             // ═══════════════════════════════════════════════════════════
             // 数学题库系统：每日 5 题，7 天回看
             // ═══════════════════════════════════════════════════════════
@@ -1629,7 +1651,14 @@ const cacheBuster = '?v=0.5.0-20260611103409';
                 ], drawA: () => { SVGBoard.drawText(200,270,"答案是: 8",24,"#00cc66"); } }
             ];
 
-            // 生成7天数据
+            // 生成7天数据（每次打开随机抽题，确保题目变化）
+            const usedIndices = { school: new Set(), olympic: new Set(), thinking: new Set() };
+            function pickUnique(pool, category) {
+                let idx;
+                do { idx = Math.floor(Math.random() * pool.length); } while (usedIndices[category].has(idx) && usedIndices[category].size < pool.length);
+                usedIndices[category].add(idx);
+                return { ...pool[idx] };
+            }
             for (let d = 0; d < 7; d++) {
                 const date = new Date(TODAY);
                 date.setDate(date.getDate() - d);
@@ -1638,11 +1667,11 @@ const cacheBuster = '?v=0.5.0-20260611103409';
                     date: ds,
                     label: d === 0 ? '今天' : d === 1 ? '昨天' : ds.slice(5),
                     questions: [
-                        { type: 'school', ...SCHOOL_Q[d % SCHOOL_Q.length] },
-                        { type: 'school', ...SCHOOL_Q[(d+1) % SCHOOL_Q.length] },
-                        { type: 'school', ...SCHOOL_Q[(d+2) % SCHOOL_Q.length] },
-                        { type: 'olympic', ...OLY_Q[d % OLY_Q.length] },
-                        { type: 'thinking', ...THINK_Q[d % THINK_Q.length] }
+                        { type: 'school', ...pickUnique(SCHOOL_Q, 'school') },
+                        { type: 'school', ...pickUnique(SCHOOL_Q, 'school') },
+                        { type: 'school', ...pickUnique(SCHOOL_Q, 'school') },
+                        { type: 'olympic', ...pickUnique(OLY_Q, 'olympic') },
+                        { type: 'thinking', ...pickUnique(THINK_Q, 'thinking') }
                     ]
                 };
             }
@@ -1710,23 +1739,29 @@ const cacheBuster = '?v=0.5.0-20260611103409';
                 btn.disabled = true;
                 btn.innerText = '⏳ 讲解中...';
                 
+                // 重置任务状态为活跃
+                currentTaskActive = true;
+                
                 // 使用步骤模式（分步讲解）
                 if (mathCurrentQ.steps && mathCurrentQ.steps.length > 0) {
                     setState(STATES.SPEAKING);
                     for (const step of mathCurrentQ.steps) {
+                        if (!currentTaskActive) break; // 检查是否被中止
                         if (step.draw) step.draw();
                         await speak(step.speech);
+                        if (!currentTaskActive) break; // speak 返回后再次检查
                     }
                 } else {
                     // 兼容旧模式（直接播放一整段语音）
                     await speak(mathCurrentQ.speech || '题目已加载');
                 }
                 
-                // 最后展示答案（高亮或补充）
-                if (mathCurrentQ.drawA) mathCurrentQ.drawA();
+                // 只有任务仍然活跃时才展示答案
+                if (currentTaskActive && mathCurrentQ.drawA) mathCurrentQ.drawA();
                 
                 btn.disabled = false;
                 btn.innerText = `🔊 重新讲解: ${mathCurrentQ.title}`;
+                currentTaskActive = true; // 恢复状态
                 setState(STATES.IDLE);
             };
 
@@ -1737,6 +1772,7 @@ const cacheBuster = '?v=0.5.0-20260611103409';
 
             window.mathBackToList = () => {
                 mathCurrentQ = null;
+                abortCurrentTask();
                 SVGBoard.clear();
                 document.getElementById('math-controls').style.display = 'none';
                 document.getElementById('math-overlay').style.display = 'block';
@@ -1756,8 +1792,10 @@ const cacheBuster = '?v=0.5.0-20260611103409';
                     showChat(mode === 'math' ? '📐 数学辅导模式已关闭' : '📝 博客演讲模式已关闭', 'ai');
                     if (mode === 'math') {
                         currentMathPlaying = null;
+                        abortCurrentTask();
                     } else if (mode === 'blog') {
                         currentBlogPlaying = null;
+                        abortCurrentTask();
                         if (blogReaderAbort) { blogReaderAbort(); blogReaderAbort = null; }
                         document.getElementById('blog-reader-overlay').classList.remove('show');
                     }
@@ -1892,6 +1930,7 @@ const cacheBuster = '?v=0.5.0-20260611103409';
                 // 关闭按钮
                 const closeBtn = document.getElementById('blog-reader-close');
                 closeBtn.onclick = () => {
+                    abortCurrentTask();
                     if (blogReaderAbort) { blogReaderAbort(); blogReaderAbort = null; }
                     overlay.classList.remove('show');
                     currentBlogPlaying = null;
